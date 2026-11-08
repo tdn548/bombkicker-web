@@ -1,0 +1,44 @@
+{
+  "name": "invalid-missing-anim",
+  "note": "no death row",
+  "image": {
+    "width": 576,
+    "height": 128
+  },
+  "layout": {
+    "v": 1,
+    "pivotY": 0.375,
+    "rows": [
+      {
+        "anim": "idle",
+        "y": 0,
+        "cellW": 32,
+        "cellH": 32,
+        "frames": 4,
+        "fps": 8
+      },
+      {
+        "anim": "walk",
+        "y": 32,
+        "cellW": 32,
+        "cellH": 32,
+        "frames": 8,
+        "fps": 12
+      },
+      {
+        "anim": "swing",
+        "y": 64,
+        "cellW": 96,
+        "cellH": 32,
+        "frames": 6,
+        "fps": 25
+      }
+    ]
+  },
+  "expect": {
+    "valid": false,
+    "errors": [
+      "ANIM_MISSING"
+    ]
+  }
+}

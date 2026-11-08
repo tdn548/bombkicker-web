@@ -1,0 +1,131 @@
+{
+  "name": "valid-edge-tiny",
+  "note": "1 x 1 image, all rows share the same pixel, decimal fps, pivotY 1",
+  "image": {
+    "width": 1,
+    "height": 1
+  },
+  "layout": {
+    "v": 1,
+    "pivotY": 1,
+    "rows": [
+      {
+        "anim": "idle",
+        "y": 0,
+        "cellW": 1,
+        "cellH": 1,
+        "frames": 1,
+        "fps": 1
+      },
+      {
+        "anim": "walk",
+        "y": 0,
+        "cellW": 1,
+        "cellH": 1,
+        "frames": 1,
+        "fps": 1.5
+      },
+      {
+        "anim": "swing",
+        "y": 0,
+        "cellW": 1,
+        "cellH": 1,
+        "frames": 1,
+        "fps": 2
+      },
+      {
+        "anim": "death",
+        "y": 0,
+        "cellW": 1,
+        "cellH": 1,
+        "frames": 1,
+        "fps": 1
+      }
+    ]
+  },
+  "expect": {
+    "valid": true,
+    "frames": {
+      "idle": {
+        "fps": 1,
+        "frameTime": 1,
+        "topLeft": [
+          {
+            "x": 0,
+            "y": 0,
+            "w": 1,
+            "h": 1
+          }
+        ],
+        "unity": [
+          {
+            "x": 0,
+            "y": 0,
+            "w": 1,
+            "h": 1
+          }
+        ]
+      },
+      "walk": {
+        "fps": 1.5,
+        "frameTime": 0.666666667,
+        "topLeft": [
+          {
+            "x": 0,
+            "y": 0,
+            "w": 1,
+            "h": 1
+          }
+        ],
+        "unity": [
+          {
+            "x": 0,
+            "y": 0,
+            "w": 1,
+            "h": 1
+          }
+        ]
+      },
+      "swing": {
+        "fps": 2,
+        "frameTime": 0.5,
+        "topLeft": [
+          {
+            "x": 0,
+            "y": 0,
+            "w": 1,
+            "h": 1
+          }
+        ],
+        "unity": [
+          {
+            "x": 0,
+            "y": 0,
+            "w": 1,
+            "h": 1
+          }
+        ]
+      },
+      "death": {
+        "fps": 1,
+        "frameTime": 1,
+        "topLeft": [
+          {
+            "x": 0,
+            "y": 0,
+            "w": 1,
+            "h": 1
+          }
+        ],
+        "unity": [
+          {
+            "x": 0,
+            "y": 0,
+            "w": 1,
+            "h": 1
+          }
+        ]
+      }
+    }
+  }
+}

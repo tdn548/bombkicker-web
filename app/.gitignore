@@ -1,0 +1,8 @@
+node_modules
+dist
+dist-mock
+playwright-report
+test-results
+# Unity WebGL build: copied in by the deploy script (SS-16) or by hand for local tests, never committed here
+public/game
+.env.local

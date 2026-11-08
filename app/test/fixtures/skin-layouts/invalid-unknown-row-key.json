@@ -1,0 +1,53 @@
+{
+  "name": "invalid-unknown-row-key",
+  "note": "extra row key 'x'",
+  "image": {
+    "width": 576,
+    "height": 128
+  },
+  "layout": {
+    "v": 1,
+    "pivotY": 0.375,
+    "rows": [
+      {
+        "anim": "idle",
+        "y": 0,
+        "cellW": 32,
+        "cellH": 32,
+        "frames": 4,
+        "fps": 8,
+        "x": 0
+      },
+      {
+        "anim": "walk",
+        "y": 32,
+        "cellW": 32,
+        "cellH": 32,
+        "frames": 8,
+        "fps": 12
+      },
+      {
+        "anim": "swing",
+        "y": 64,
+        "cellW": 96,
+        "cellH": 32,
+        "frames": 6,
+        "fps": 25
+      },
+      {
+        "anim": "death",
+        "y": 96,
+        "cellW": 32,
+        "cellH": 32,
+        "frames": 9,
+        "fps": 10.3448
+      }
+    ]
+  },
+  "expect": {
+    "valid": false,
+    "errors": [
+      "UNKNOWN_KEY"
+    ]
+  }
+}

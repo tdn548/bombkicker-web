@@ -1,0 +1,19 @@
+{
+  "name": "invalid-rows-not-array",
+  "note": "rows is an object",
+  "image": {
+    "width": 576,
+    "height": 128
+  },
+  "layout": {
+    "v": 1,
+    "pivotY": 0.375,
+    "rows": {}
+  },
+  "expect": {
+    "valid": false,
+    "errors": [
+      "ROWS_TYPE"
+    ]
+  }
+}
