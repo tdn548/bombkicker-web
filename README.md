@@ -129,6 +129,8 @@ Needs a local bombkicker-api on :8787 with `CORS_ORIGINS` containing `http://loc
 `http://localhost:8000/bombkicker-web/` in a fresh Chromium profile (Unity creates `BK_DEVICE_ID` and logs in), then the
 new site at the same URL in the same profile (HTTP cache cleared, IndexedDB kept, like a player coming back), checks
 that `GET /v1/me` returns the same player id, then plays an offline bots match. Result in `<out>/rehearsal.json`.
+If another local server holds `[::1]:8000` (`lsof -nP -iTCP:8000`), `localhost` reaches that one instead: add
+`--host 127.0.0.1` (Unity keys PlayerPrefs on the page URL, so both phases use the same host anyway).
 
 ## Preview on the iPhone (D17: iPhone only, no staging)
 

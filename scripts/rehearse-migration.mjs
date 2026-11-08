@@ -5,7 +5,7 @@
 //      -> React adopts Unity's legacy device id; GET /v1/me must return the same player id
 //   C. (unless --no-offline) offline 1v1 bots match in the new site -> result -> back to the menu
 //
-//   node scripts/rehearse-migration.mjs --old <folder> --new <folder> [--port 8000] [--api http://localhost:8787]
+//   node scripts/rehearse-migration.mjs --old <folder> --new <folder> [--port 8000] [--host localhost] [--api http://<host>:8787]
 //        [--out <screenshot dir>] [--no-offline] [--headed]
 // Needs: app/node_modules (npm ci in app/) with Playwright's Chromium, and a local bombkicker-api on :8787 whose
 // CORS_ORIGINS has http://localhost:<port> (Unity and React send localhost pages to localhost:8787).
@@ -27,7 +27,8 @@ const opt = (name, def) => {
 const oldDir = opt("old");
 const newDir = opt("new");
 const port = Number(opt("port", "8000"));
-const api = opt("api", "http://localhost:8787");
+const host = opt("host", "localhost"); // 127.0.0.1 if another server holds [::1]:<port>
+const api = opt("api", `http://${host}:8787`);
 const outDir = opt("out", path.join(os.tmpdir(), "bk-rehearsal"));
 const offline = !args.includes("--no-offline");
 if (!oldDir || !newDir) {
@@ -35,7 +36,7 @@ if (!oldDir || !newDir) {
   process.exit(2);
 }
 fs.mkdirSync(outDir, { recursive: true });
-const url = `http://localhost:${port}/bombkicker-web/`;
+const url = `http://${host}:${port}/bombkicker-web/`;
 const log = (...a) => console.log(new Date().toISOString().slice(11, 19), ...a);
 const result = { url, api, old: path.resolve(oldDir), new: path.resolve(newDir), startedAt: new Date().toISOString() };
 
