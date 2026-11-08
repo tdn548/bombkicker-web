@@ -6,8 +6,10 @@
  */
 export const ROUTER_MODE: "hash" | "browser" = "hash";
 
-/** Production Worker (same value as Unity's ApiConfig.ProductionUrl). */
-export const PRODUCTION_API_URL = "https://bombkicker-api-production.tdn548.workers.dev";
+import { PRODUCTION_API_URL } from "./csp";
+
+/** Production Worker (same value as Unity's ApiConfig.ProductionUrl); defined in csp.ts so the policy uses the same value. */
+export { PRODUCTION_API_URL };
 /** wrangler dev port; Unity's ApiConfig uses the same port when the page is served from localhost or the LAN. */
 export const LOCAL_API_PORT = 8787;
 
@@ -32,9 +34,17 @@ export function resolveApiUrl(hostname: string, override: string | undefined): s
 
 const env = import.meta.env;
 
-/** Mock API and mock Unity (development without the Worker or the WebGL build): `npm run dev:mock` or `?mock=1`. */
-export const USE_MOCK =
-  env.MODE === "mock" || (typeof location !== "undefined" && new URLSearchParams(location.search).has("mock"));
+/**
+ * Mock mode: `--mode mock` builds, or `?mock=1` on the dev server only. A published build ignores `?mock`: the mock
+ * Unity has no legacy device id, so a crafted `?mock=1` link would store a new `bk_device_id` and orphan an old
+ * player's account on that browser (SS-7 recheck, SEC-011).
+ */
+export function isMockMode(mode: string, dev: boolean, search: string): boolean {
+  return mode === "mock" || (dev && new URLSearchParams(search).has("mock"));
+}
+
+/** Mock API and mock Unity (development without the Worker or the WebGL build): `npm run dev:mock` or `?mock=1` in `npm run dev`. */
+export const USE_MOCK = isMockMode(env.MODE, env.DEV, typeof location !== "undefined" ? location.search : "");
 
 export const API_URL = resolveApiUrl(typeof location !== "undefined" ? location.hostname : "localhost", env.VITE_API_URL);
 

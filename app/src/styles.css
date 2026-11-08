@@ -219,3 +219,6 @@ h1, h2, p { margin: 0; }
   .result__buttons { grid-template-columns: 1fr; }
   .topbar__record { margin-left: 0; }
 }
+
+/* frameGuard.ts: shown instead of the app inside a frame */
+.framed-notice { padding: 24px; text-align: center; }

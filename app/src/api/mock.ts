@@ -1,6 +1,6 @@
 // In-browser mock of the public API (development and tests without the Worker). Same routes and bodies as
 // bombkicker-api docs/api.md for what the player site uses. State lives in localStorage ("bk_mock_db") so a reload
-// keeps the player, like the real API. Enable with `npm run dev:mock` or `?mock=1`.
+// keeps the player, like the real API. Enable with `npm run dev:mock`, or `?mock=1` on the dev server (config.ts isMockMode).
 // Shop test knobs (window.__BK_MOCK__, see src/unity/mockUnity.ts): purchaseErrors / equipErrors are queues of API
 // error codes (or "network": no answer and nothing stored, "networkCommitted": the purchase commits but the answer is
 // lost, "networkDown": no answer and every request after it fails until the queue moves on), one per attempt.

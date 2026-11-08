@@ -221,7 +221,14 @@ test("equip -> the offline match shows the skin on Player 1 (Unity WebGL build)"
     // Count magenta pixels (the recoloured sheet) in the screenshot; Player 1 is Team 1 on the left half.
     const b64 = fs.readFileSync(file).toString("base64");
     const stats = await page.evaluate(async (data) => {
-      const img = await createImageBitmap(await (await fetch(`data:image/png;base64,${data}`)).blob());
+      // <img> with a data: URL, not fetch(): the site's CSP allows data: in img-src only (connect-src has no data:).
+      const el = await new Promise<HTMLImageElement>((res, rej) => {
+        const i = new Image();
+        i.onload = () => res(i);
+        i.onerror = rej;
+        i.src = `data:image/png;base64,${data}`;
+      });
+      const img = await createImageBitmap(el);
       const c = new OffscreenCanvas(img.width, img.height);
       const ctx = c.getContext("2d")!;
       ctx.drawImage(img, 0, 0);
