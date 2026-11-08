@@ -4,22 +4,43 @@ import { describe, expect, it } from "vitest";
 import { App } from "./App";
 import { createMockApi } from "./api/mock";
 import { isMockMode } from "./config";
-import { LOCAL_API_ORIGINS, PRODUCTION_API_URL, apiOrigins, buildCsp, cspMetaTag, originOf } from "./csp";
+import { LOCAL_API_ORIGINS, PRODUCTION_API_URL, apiOrigins, buildCsp, cspMetaTag, gameServerSources, originOf } from "./csp";
 import { isFramed, renderFramedNotice } from "./frameGuard";
 import { createGatedHistory } from "./router/gatedHistory";
 import { ignoredSummary, parseFromUnity } from "./unity/bridge";
 
 describe("CSP (src/csp.ts)", () => {
   it("published build: production API only, Unity loader sources, no unsafe-inline / unsafe-eval", () => {
-    const p = buildCsp(apiOrigins({}));
+    const p = buildCsp(apiOrigins({}), gameServerSources({}));
     expect(p).toContain("script-src 'self' blob: 'wasm-unsafe-eval'");
     expect(p).toContain("worker-src 'self' blob:");
-    expect(p).toContain(`connect-src 'self' ${PRODUCTION_API_URL};`);
+    // BUG-SS18-001: Unity's WebSocket to the Edgegap game server (wss://<id>.pr.edgegap.net:<dynamic port>)
+    expect(p).toContain(`connect-src 'self' ${PRODUCTION_API_URL} wss://*.pr.edgegap.net:*;`);
     expect(p).toContain(`img-src 'self' data: blob: ${PRODUCTION_API_URL};`);
     expect(p).toContain("style-src 'self';");
     expect(p).toContain("object-src 'none'");
     expect(p).toContain("base-uri 'none'");
-    expect(p).not.toMatch(/'unsafe-inline'|'unsafe-eval'|localhost|127\.0\.0\.1|\*/);
+    expect(p).not.toMatch(/'unsafe-inline'|'unsafe-eval'|localhost|127\.0\.0\.1|ws:/);
+    // the only wildcards are the Edgegap subdomain and its port
+    expect(p.replace("wss://*.pr.edgegap.net:*", "")).not.toContain("*");
+    expect(buildCsp(apiOrigins({}))).toBe(p); // the default game servers are the production ones
+  });
+  it("game server WebSockets: Edgegap always; local hosts only for a local build (BK_CSP_LOCAL_API=1)", () => {
+    expect(gameServerSources({})).toEqual(["wss://*.pr.edgegap.net:*"]);
+    expect(gameServerSources({ BK_CSP_LOCAL_API: "true" })).toEqual(["wss://*.pr.edgegap.net:*"]);
+    // VITE_API_URL alone (a dev .env.local) adds no WebSocket source
+    expect(gameServerSources({ VITE_API_URL: "http://192.168.1.20:8787" })).toEqual(["wss://*.pr.edgegap.net:*"]);
+    const local = ["wss://*.pr.edgegap.net:*", "ws://localhost:*", "wss://localhost:*", "ws://127.0.0.1:*", "wss://127.0.0.1:*"];
+    expect(gameServerSources({ BK_CSP_LOCAL_API: "1" })).toEqual(local);
+    expect(gameServerSources({ BK_CSP_LOCAL_API: "1", VITE_API_URL: "http://192.168.1.20:8787" })).toEqual([...local, "ws://192.168.1.20:*", "wss://192.168.1.20:*"]);
+    expect(gameServerSources({ BK_CSP_LOCAL_API: "1", VITE_API_URL: "http://localhost:8787" })).toEqual(local);
+    // a public or bad API host never gets a WebSocket source
+    for (const other of ["https://api.example", "http://8.8.8.8:8787", "*", "javascript:alert(1)", "https://a.example; connect-src *"]) {
+      expect(gameServerSources({ BK_CSP_LOCAL_API: "1", VITE_API_URL: other })).toEqual(local);
+    }
+    const p = buildCsp(apiOrigins({ BK_CSP_LOCAL_API: "1" }), gameServerSources({ BK_CSP_LOCAL_API: "1" }));
+    expect(p).toContain(`connect-src 'self' ${PRODUCTION_API_URL} ${LOCAL_API_ORIGINS.join(" ")} ${local.join(" ")};`);
+    expect(p).toContain(`img-src 'self' data: blob: ${PRODUCTION_API_URL} ${LOCAL_API_ORIGINS.join(" ")};`);
   });
   it("local test builds add only what is asked for", () => {
     expect(apiOrigins({ BK_CSP_LOCAL_API: "1" })).toEqual([PRODUCTION_API_URL, ...LOCAL_API_ORIGINS]);

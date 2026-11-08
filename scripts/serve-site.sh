@@ -41,7 +41,7 @@ mkdir -p "$root$(dirname "${base%/}")"
 ln -s "$dir" "$root${base%/}"
 lan="$(ipconfig getifaddr en0 2>/dev/null || hostname -I 2>/dev/null | awk '{print $1}' || true)"
 echo "serve-site: $dir"
-[ -n "$local_api" ] && echo "  local test build, API $local_api (CSP allows it, localhost:8787 and 127.0.0.1:8787)"
+[ -n "$local_api" ] && echo "  local test build, API $local_api (CSP allows it, localhost:8787 and 127.0.0.1:8787, ws/wss game servers on those hosts)"
 echo "  http://localhost:$port$base"
 if [ -n "$lan" ]; then
   case "$local_api" in

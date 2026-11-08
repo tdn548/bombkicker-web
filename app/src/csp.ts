@@ -8,6 +8,11 @@
 // - script-src 'wasm-unsafe-eval': WebAssembly.instantiate of Web.wasm.unityweb (allows wasm only, not eval()).
 // - worker-src blob: the loader's gzip decompression Worker is made from a blob: URL.
 // - connect-src / img-src API origin: React's fetches and sheet <img>; Unity's UnityWebRequest calls and sheet downloads.
+// - connect-src game servers (BUG-SS18-001): Unity's WebSocket transport to the dedicated server. Edgegap gives
+//   wss://<deployment id>.pr.edgegap.net:<dynamic external port> (bombkicker-api docs/api.md, src/lib/edgegap.ts: host =
+//   the deployment fqdn, port = ports.gameport.external, TLS Upgrade on, so always wss). Local test builds
+//   (BK_CSP_LOCAL_API=1) also allow ws/wss to localhost, 127.0.0.1 and the LAN API host, any port (local Edgegap
+//   emulator, Mac dev server); deploy-commit.sh refuses any build that names them.
 // A meta policy cannot carry frame-ancestors (browsers ignore it there); main.tsx refuses to run inside a frame.
 
 /** Production Worker (same value as Unity's ApiConfig.ProductionUrl). */
@@ -16,6 +21,18 @@ export const PRODUCTION_API_URL = "https://bombkicker-api-production.tdn548.work
 /** Local API origins Unity and React use for pages on this machine (`<page host>:8787`, config.ts LOCAL_API_PORT). */
 export const LOCAL_API_ORIGINS = ["http://localhost:8787", "http://127.0.0.1:8787"] as const;
 
+/** Game servers in production: Edgegap deployments, TLS on a dynamic port. */
+export const PRODUCTION_GAME_SERVERS = ["wss://*.pr.edgegap.net:*"] as const;
+/** Hosts a local test build may open WebSockets to (any port). */
+export const LOCAL_GAME_SERVER_HOSTS = ["localhost", "127.0.0.1"] as const;
+/** localhost, 127.x or a private LAN IPv4 (10.x, 172.16-31.x, 192.168.x); same rule as config.ts isLocalHost. */
+function isLocalOrLanHost(host: string): boolean {
+  if (host === "localhost") return true;
+  const m = /^(\d{1,3})\.(\d{1,3})\.\d{1,3}\.\d{1,3}$/.exec(host);
+  if (!m) return false;
+  const [a, b] = [Number(m[1]), Number(m[2])];
+  return a === 127 || a === 10 || (a === 192 && b === 168) || (a === 172 && b >= 16 && b <= 31);
+}
 /** Origin of an http(s) URL, or null for anything else (so a bad env value cannot widen the policy). */
 export function originOf(url: string | undefined): string | null {
   if (!url) return null;
@@ -40,13 +57,30 @@ export function apiOrigins(env: { VITE_API_URL?: string; BK_CSP_LOCAL_API?: stri
   return [...new Set(out)];
 }
 
-export function buildCsp(api: readonly string[]): string {
+/**
+ * WebSocket sources for Unity's game server connection. Always the Edgegap pattern. Only with BK_CSP_LOCAL_API=1
+ * (build-site.sh --local-api): ws:// and wss:// to localhost, 127.0.0.1 and the VITE_API_URL host if that host is
+ * local or on the LAN, any port. VITE_API_URL alone never adds a WebSocket source.
+ */
+export function gameServerSources(env: { VITE_API_URL?: string; BK_CSP_LOCAL_API?: string }): string[] {
+  const out: string[] = [...PRODUCTION_GAME_SERVERS];
+  if (env.BK_CSP_LOCAL_API !== "1") return out;
+  const hosts: string[] = [...LOCAL_GAME_SERVER_HOSTS];
+  const override = originOf(env.VITE_API_URL);
+  if (override) {
+    const host = new URL(override).hostname;
+    if (isLocalOrLanHost(host)) hosts.push(host);
+  }
+  for (const h of new Set(hosts)) out.push(`ws://${h}:*`, `wss://${h}:*`);
+  return out;
+}
+export function buildCsp(api: readonly string[], gameServers: readonly string[] = PRODUCTION_GAME_SERVERS): string {
   const apiList = api.join(" ");
   return [
     "default-src 'self'",
     "script-src 'self' blob: 'wasm-unsafe-eval'",
     "worker-src 'self' blob:",
-    `connect-src 'self' ${apiList}`,
+    `connect-src 'self' ${[...api, ...gameServers].join(" ")}`,
     `img-src 'self' data: blob: ${apiList}`,
     "style-src 'self'",
     "font-src 'self'",

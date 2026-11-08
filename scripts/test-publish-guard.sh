@@ -24,11 +24,12 @@ expect() {
 
 # The real policies, from the same code the Vite build uses.
 csp() { (cd "$repo" && node --input-type=module -e "
-import { apiOrigins, buildCsp, cspMetaTag } from './app/src/csp.ts';
-console.log(cspMetaTag(buildCsp(apiOrigins(JSON.parse(process.argv[1])))));" "$1"); }
+import { apiOrigins, buildCsp, cspMetaTag, gameServerSources } from './app/src/csp.ts';
+const env = JSON.parse(process.argv[1]);
+console.log(cspMetaTag(buildCsp(apiOrigins(env), gameServerSources(env))));" "$1"); }
 prod_meta="$(csp '{}')" || { echo "cannot load app/src/csp.ts with node"; exit 1; }
 local_meta="$(csp '{"BK_CSP_LOCAL_API":"1"}')"
-lan_meta="$(csp '{"VITE_API_URL":"http://192.168.1.20:8787"}')"
+lan_meta="$(csp '{"BK_CSP_LOCAL_API":"1","VITE_API_URL":"http://192.168.1.20:8787"}')"   # what build-site.sh --local-api <LAN> sets
 
 # site <dir> <meta or ""> <local: true|false> [localApi]
 site() {
@@ -48,10 +49,20 @@ mis_lan="$(site mislabel-lan "$lan_meta" false)"
 mis_10="$(site mislabel-10 "${prod_meta/connect-src \'self\'/connect-src \'self\' https://10.0.0.5:8443}" false)"
 mis_v6="$(site mislabel-v6 "${prod_meta/connect-src \'self\'/connect-src \'self\' http://[::1]:8787}" false)"
 mis_mdns="$(site mislabel-mdns "${prod_meta/connect-src \'self\'/connect-src \'self\' https://macbook.local:8787}" false)"
+# BUG-SS18-001: a game server WebSocket to a local host (the local build's ws/wss sources), version.json not local.
+mis_ws127="$(site mislabel-ws127 "${prod_meta/connect-src \'self\'/connect-src \'self\' ws://127.0.0.1:*}" false)"
+mis_wss_lan="$(site mislabel-wss-lan "${prod_meta/connect-src \'self\'/connect-src \'self\' wss://192.168.1.20:*}" false)"
+mis_ws_localhost="$(site mislabel-ws-localhost "${prod_meta/connect-src \'self\'/connect-src \'self\' wss://localhost:7900}" false)"
+mis_ws_public="$(site mislabel-ws-public "${prod_meta/connect-src \'self\'/connect-src \'self\' ws://game.example:*}" false)"
+no_edgegap="$(site no-edgegap "${prod_meta/ wss:\/\/\*.pr.edgegap.net:\*/}" false)"
 nocsp="$(site no-csp "" false)"
 noprod="$(site no-prod-api "${prod_meta//https:\/\/bombkicker-api-production.tdn548.workers.dev/https://example.com}" false)"
 localflag="$(site local-flag-only "$prod_meta" true)"
 
+case "$prod_meta" in *"wss://*.pr.edgegap.net:*"*) ok "production policy allows wss://*.pr.edgegap.net:*" ;; *) ko "production policy lacks the Edgegap game servers" "$prod_meta" ;; esac
+case "$prod_meta" in *ws://*|*127.0.0.1*|*localhost*) ko "production policy names a local or ws: source" "$prod_meta" ;; *) ok "production policy has no local or ws: source" ;; esac
+case "$local_meta" in *"ws://127.0.0.1:* wss://127.0.0.1:*"*) ok "local policy allows ws/wss to 127.0.0.1 (any port)" ;; *) ko "local policy lacks 127.0.0.1 game servers" "$local_meta" ;; esac
+case "$lan_meta" in *"ws://192.168.1.20:* wss://192.168.1.20:*"*) ok "LAN policy allows ws/wss to the LAN host" ;; *) ko "LAN policy lacks the LAN game server" "$lan_meta" ;; esac
 D="$here/deploy-commit.sh"
 echo "deploy-commit.sh --check (dry run)"
 expect 0 "production build passes"                       "$D" --check --site "$prod"
@@ -63,6 +74,11 @@ expect 1 "CSP with 192.168.x, version.json not local"    "$D" --check --site "$m
 expect 1 "CSP with https://10.x"                         "$D" --check --site "$mis_10"
 expect 1 "CSP with [::1]"                                "$D" --check --site "$mis_v6"
 expect 1 "CSP with *.local"                              "$D" --check --site "$mis_mdns"
+expect 1 "CSP with ws://127.0.0.1:* (game server)"      "$D" --check --site "$mis_ws127"
+expect 1 "CSP with wss://192.168.x:* (game server)"      "$D" --check --site "$mis_wss_lan"
+expect 1 "CSP with wss://localhost (game server)"        "$D" --check --site "$mis_ws_localhost"
+expect 1 "CSP with a plain ws:// source"                 "$D" --check --site "$mis_ws_public"
+expect 1 "connect-src without the Edgegap game servers"  "$D" --check --site "$no_edgegap"
 expect 1 "no CSP meta"                                   "$D" --check --site "$nocsp"
 expect 1 "connect-src without the production API"        "$D" --check --site "$noprod"
 

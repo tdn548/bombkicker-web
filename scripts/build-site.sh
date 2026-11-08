@@ -13,7 +13,8 @@
 #                version.json then says dirty: true). A publish build must be clean.
 # --local-api    LOCAL TEST BUILD, never published (SEC-014). <origin> = the local API the page talks to:
 #                http://localhost:8787 (or 127.0.0.1) for this Mac (rehearsal), http://<mac LAN ip>:8787 for the iPhone LAN preview.
-#                The CSP then also allows http://localhost:8787, http://127.0.0.1:8787 and <origin>, and
+#                The CSP then also allows http://localhost:8787, http://127.0.0.1:8787 and <origin>, and ws:// / wss://
+#                (any port) to localhost, 127.0.0.1 and the <origin> host for the local game servers, and
 #                version.json says "local": true. Default output: dist-local/. deploy-commit.sh refuses such a build.
 #                Without --local-api the build is a production build: the CSP allows only the production API, and
 #                the script refuses VITE_API_URL / BK_CSP_LOCAL_API in the environment and checks the output with
@@ -35,7 +36,7 @@ while [ $# -gt 0 ]; do
     --base) base="${2:-}"; shift 2 ;;
     --allow-dirty) allow_dirty=1; shift ;;
     --local-api) local_api="${2:-}"; shift 2 ;;
-    -h|--help) sed -n '2,25p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,24p' "$0"; exit 0 ;;
     *) die "unknown argument: $1 (see --help)" ;;
   esac
 done

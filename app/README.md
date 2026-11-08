@@ -47,8 +47,10 @@ Mock knobs for tests and manual checks: `window.__BK_MOCK__` (see `src/unity/moc
 - CSP: `vite build` adds `<meta http-equiv="Content-Security-Policy">` to `index.html` (`src/csp.ts`; GitHub Pages cannot
   send headers, D10). `script-src 'self' blob: 'wasm-unsafe-eval'` and `worker-src 'self' blob:` are what the Unity loader
   needs (blob: framework script, blob: gzip worker, wasm); `connect-src` / `img-src` allow `'self'` and the production
-  API only. Local builds: `BK_CSP_LOCAL_API=1` adds `http://localhost:8787` and `http://127.0.0.1:8787`; `VITE_API_URL`
-  adds its origin (use `http://<LAN IP>:8787` for phone tests). `npm run dev` has no policy (hot reload uses inline scripts).
+  API only, and `connect-src` also the Edgegap game servers `wss://*.pr.edgegap.net:*` (Unity's WebSocket, dynamic port).
+  Local builds: `BK_CSP_LOCAL_API=1` adds `http://localhost:8787` and `http://127.0.0.1:8787`, plus `ws://`/`wss://` to
+  localhost and 127.0.0.1 (any port, local game servers); `VITE_API_URL` adds its origin (use `http://<LAN IP>:8787`
+  for phone tests), and with `BK_CSP_LOCAL_API=1` ws/wss to its host if that host is local or on the LAN. `npm run dev` has no policy (hot reload uses inline scripts).
   `e2e/csp.real.spec.ts` and `e2e/security.mock.spec.ts` fail on any violation.
 - Inside a frame the app does not start (`src/frameGuard.ts`): a `<meta>` CSP cannot carry `frame-ancestors`.
 - `?mock=1` works on the dev server only (`isMockMode` in `src/config.ts`).

@@ -12,8 +12,9 @@
 #
 # Publish check (SEC-014), before anything in the repo changes. Refused:
 #   - version.json says "local": true or has a localApi (build-site.sh --local-api: a local test build)
-#   - --site: index.html has no Content-Security-Policy meta, or its connect-src lacks the production API
-#   - the policy names an http: source, localhost, 127.x, 0.0.0.0, [::1], *.local or a private / link-local IPv4
+#   - --site: index.html has no Content-Security-Policy meta, or its connect-src lacks the production API or the
+#     Edgegap game servers (wss://*.pr.edgegap.net:*, BUG-SS18-001: without it online play cannot connect)
+#   - the policy names an http: or ws: source, localhost, 127.x, 0.0.0.0, [::1], *.local or a private / link-local IPv4
 # A rollback runs the same check, but may restore a site without a CSP (the Unity-only page, before the React site).
 set -euo pipefail
 
@@ -21,6 +22,7 @@ KEEP=(.git .gitignore README.md app scripts)
 
 die() { echo "deploy-commit: $*" >&2; exit 1; }
 PRODUCTION_API="https://bombkicker-api-production.tdn548.workers.dev"   # app/src/csp.ts PRODUCTION_API_URL
+GAME_SERVERS='wss://\*\.pr\.edgegap\.net:\*'                              # app/src/csp.ts PRODUCTION_GAME_SERVERS (as a regex)
 site="" rollback="" repo="" branch="main" check_only=0
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -29,7 +31,7 @@ while [ $# -gt 0 ]; do
     --repo) repo="${2:-}"; shift 2 ;;
     --branch) branch="${2:-}"; shift 2 ;;
     --check) check_only=1; shift ;;
-    -h|--help) sed -n '2,19p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,18p' "$0"; exit 0 ;;
     *) die "unknown argument: $1 (see --help)" ;;
   esac
 done
@@ -56,12 +58,14 @@ publish_check() {
     return 0
   fi
   bad="$(printf '%s\n' "$policy" | tr ' ;' '\n\n' | grep -Ei \
-    '^http:|localhost|(^|[/.])127\.[0-9]|0\.0\.0\.0|\[::1\]|\.local([:/]|$)|(^|//)10\.[0-9]+\.|(^|//)192\.168\.|(^|//)172\.(1[6-9]|2[0-9]|3[01])\.|(^|//)169\.254\.' \
+    '^http:|^ws:|localhost|(^|[/.])127\.[0-9]|0\.0\.0\.0|\[::1\]|\.local([:/]|$)|(^|//)10\.[0-9]+\.|(^|//)192\.168\.|(^|//)172\.(1[6-9]|2[0-9]|3[01])\.|(^|//)169\.254\.' \
     | sort -u | tr '\n' ' ' || true)"
   [ -z "$bad" ] || die "REFUSED: the CSP in index.html allows local origins: $bad(a local test build, never publish it)"
   if [ "$require_csp" -eq 1 ]; then
     printf '%s\n' "$policy" | tr ';' '\n' | grep -Eq "^[[:space:]]*connect-src( [^ ]+)* $PRODUCTION_API( |\$)" \
       || die "REFUSED: the CSP connect-src does not allow the production API $PRODUCTION_API"
+    printf '%s\n' "$policy" | tr ';' '\n' | grep -Eq "^[[:space:]]*connect-src( [^ ]+)* $GAME_SERVERS( |\$)" \
+      || die "REFUSED: the CSP connect-src does not allow the game servers wss://*.pr.edgegap.net:* (online play would be blocked, BUG-SS18-001)"
   fi
   return 0
 }
@@ -69,7 +73,7 @@ publish_check() {
 if [ "$check_only" -eq 1 ]; then
   [ -f "$site/index.html" ] || die "no index.html in $site"
   publish_check "$site" 1
-  echo "deploy-commit: check passed: $site is a production build (CSP present, production API only, not local)"
+  echo "deploy-commit: check passed: $site is a production build (CSP present, production API and Edgegap game servers only, not local)"
   exit 0
 fi
 

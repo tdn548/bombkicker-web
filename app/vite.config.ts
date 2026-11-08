@@ -1,10 +1,11 @@
 /// <reference types="vitest/config" />
 import { defineConfig, loadEnv, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
-import { apiOrigins, buildCsp, cspMetaTag } from "./src/csp.ts";
+import { apiOrigins, buildCsp, cspMetaTag, gameServerSources } from "./src/csp.ts";
 
 // Built index.html gets the CSP as a <meta> tag (GitHub Pages cannot send headers, D10). Build only: the dev server
-// needs inline scripts for hot reload. Local builds that talk to a local API: BK_CSP_LOCAL_API=1 or VITE_API_URL.
+// needs inline scripts for hot reload. Local builds that talk to a local API: BK_CSP_LOCAL_API=1 or VITE_API_URL
+// (BK_CSP_LOCAL_API=1 also allows ws/wss to the local game servers, src/csp.ts gameServerSources).
 function cspMeta(policy: string): Plugin {
   return {
     name: "bk-csp-meta",
@@ -27,7 +28,7 @@ export default defineConfig(({ mode }) => {
   const env = { ...loadEnv(mode, process.cwd(), ["VITE_", "BK_"]), ...process.env };
   return {
     base: "/bombkicker-web/",
-    plugins: [react(), cspMeta(buildCsp(apiOrigins(env)))],
+    plugins: [react(), cspMeta(buildCsp(apiOrigins(env), gameServerSources(env)))],
     server: { port: 5180, strictPort: true },
     preview: { port: 8000, strictPort: false },
     build: { outDir: "dist", sourcemap: true },

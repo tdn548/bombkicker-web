@@ -51,6 +51,7 @@ iPhone LAN preview, build with `--local-api <origin>`:
 | | production build (default) | local test build (`--local-api`) |
 |---|---|---|
 | CSP `connect-src` / `img-src` | `'self'` + production API | also `http://localhost:8787`, `http://127.0.0.1:8787` and `<origin>` |
+| CSP `connect-src` game servers | `wss://*.pr.edgegap.net:*` (Edgegap, dynamic port) | also `ws://` and `wss://` to `localhost`, `127.0.0.1` and the `<origin>` host, any port |
 | `<origin>` | - | `http://localhost:8787` (this Mac) or `http://<mac LAN ip>:8787` (iPhone); port 8787 only |
 | `version.json` | `"local": false, "localApi": null` | `"local": true, "localApi": "<origin>"` |
 | default output | `dist-site/` | `dist-local/` |
@@ -60,8 +61,8 @@ iPhone LAN preview, build with `--local-api <origin>`:
 A production build refuses `VITE_API_URL` or `BK_CSP_LOCAL_API` in the environment and ends with
 `deploy-commit.sh --check`, so a CSP that names a local origin (for example from an `app/.env.local`) fails the build.
 `deploy-commit.sh` (`--site`, `--rollback-to`, and the dry run `--check --site <dir>`) refuses a site whose
-`version.json` says `local`, whose `index.html` has no CSP, whose CSP lacks the production API in `connect-src`, or
-whose CSP names an `http:` source, `localhost`, `127.x`, `0.0.0.0`, `[::1]`, `*.local` or a private / link-local IPv4.
+`version.json` says `local`, whose `index.html` has no CSP, whose CSP lacks the production API or `wss://*.pr.edgegap.net:*` in `connect-src`, or
+whose CSP names an `http:` or `ws:` source, `localhost`, `127.x`, `0.0.0.0`, `[::1]`, `*.local` or a private / link-local IPv4.
 A rollback may restore a site without a CSP (the Unity-only page). `scripts/test-publish-guard.sh` tests all of this
 in a few seconds (fake sites with the real policy from `app/src/csp.ts`, a throwaway git repo, nothing pushed).
 
