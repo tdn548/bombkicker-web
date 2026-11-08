@@ -21,6 +21,8 @@ export default defineConfig({
     ? [
         { name: "real-chromium", testMatch: /real\.spec\.ts/, use: { ...devices["Desktop Chrome"], baseURL: `http://localhost:${REAL_PORT}/bombkicker-web/` } },
         { name: "real-webkit", testMatch: /real\.spec\.ts/, use: { ...devices["Desktop Safari"], baseURL: `http://localhost:${REAL_PORT}/bombkicker-web/` } },
+        // SS-14: shop flows on the phone layout (the Unity tests skip themselves outside Chromium)
+        { name: "real-iphone-webkit", testMatch: /shop\.real\.spec\.ts/, use: { ...devices["iPhone 15"], baseURL: `http://localhost:${REAL_PORT}/bombkicker-web/` } },
       ]
     : [
         { name: "mock-desktop-chromium", testMatch: /mock\.spec\.ts/, use: { ...devices["Desktop Chrome"], viewport: { width: 1280, height: 800 }, baseURL: `http://localhost:${MOCK_PORT}/bombkicker-web/` } },

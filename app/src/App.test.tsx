@@ -35,7 +35,7 @@ describe("App with mock Unity", () => {
     const init = sent("init")[0].msg as Record<string, unknown>;
     expect(init).toMatchObject({ type: "init", v: 1, accessToken: "…", lang: "vi", player: { displayName: expect.any(String) } });
     expect((init.equippedSkin as { key: string }).key).toBe("human");
-    expect((init.catalog as unknown[]).length).toBe(4);
+    expect((init.catalog as unknown[]).length).toBe(6);
   });
 
   it("Unity authExpired -> re-login -> setToken, then the search goes on", async () => {

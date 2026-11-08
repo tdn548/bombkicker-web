@@ -115,7 +115,8 @@ export function SkinSprite({ skin, anim = "idle", scale = 4, flip = false, ring 
     let raf = 0;
     const t0 = performance.now();
     const tick = (now: number) => {
-      draw(Math.floor(((now - t0) / 1000) * row.fps));
+      // rAF timestamps can be a little earlier than t0 (frame start), so clamp at frame 0
+      draw(Math.max(0, Math.floor(((now - t0) / 1000) * row.fps)));
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);

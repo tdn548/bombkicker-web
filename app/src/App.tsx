@@ -4,7 +4,7 @@
 import { StrictMode, useEffect, useState, type ReactNode } from "react";
 import { Route, Routes, unstable_HistoryRouter as HistoryRouter } from "react-router";
 import { AuthProvider } from "./auth/AuthProvider";
-import { ComingSoon } from "./features/placeholder/ComingSoon";
+import { LeaderboardPage } from "./features/leaderboard/LeaderboardPage";
 import { MainMenu } from "./features/menu/MainMenu";
 import { PlayOffline } from "./features/play/PlayOffline";
 import { PlayOnline } from "./features/play/PlayOnline";
@@ -12,6 +12,7 @@ import { PlayProvider } from "./features/play/PlayProvider";
 import { ResultScreen } from "./features/play/ResultScreen";
 import { SearchingOverlay } from "./features/play/SearchingOverlay";
 import { ProfilePage } from "./features/profile/ProfilePage";
+import { ShopPage } from "./features/shop/ShopPage";
 import { I18nProvider } from "./i18n/I18nProvider";
 import type { GatedHistory } from "./router/gatedHistory";
 import { PlayerDataProvider } from "./state/PlayerData";
@@ -65,8 +66,8 @@ export function App({ history, basename, apiUrl, fetchImpl, mockUnity }: AppDeps
                       <Route path="/play/offline" element={<PlayOffline />} />
                       <Route path="/result" element={<ResultScreen />} />
                       <Route path="/profile" element={<ProfilePage />} />
-                      <Route path="/shop" element={<ComingSoon title="menu.shop" body="soon.shop" />} />
-                      <Route path="/leaderboard" element={<ComingSoon title="menu.leaderboard" body="soon.leaderboard" />} />
+                      <Route path="/shop" element={<ShopPage />} />
+                      <Route path="/leaderboard" element={<LeaderboardPage />} />
                       <Route path="*" element={<MainMenu />} />
                     </Routes>
                   </AppContent>

@@ -3,7 +3,8 @@
 // Test knobs on window.__BK_MOCK__ (all optional):
 //   loadMs (1200), legacyDeviceId (null), result ("win"), matchMs (2500), recordDelayMs (1200),
 //   failLoad (false), authExpiredOnStart (false), noRecord (false: online result never reaches the API),
-//   syncStatus (true: answer startOnline with a status inside sendMessage, like the real Unity)
+//   syncStatus (true: answer startOnline with a status inside sendMessage, like the real Unity),
+//   purchaseErrors / equipErrors / purchaseDelayMs (mock API, see src/api/mock.ts)
 // Room codes for errors: AAAAAA ROOM_NOT_FOUND, FFFFFF ROOM_FULL, GGGGGG SERVER_GONE, BBBBBB SERVERS_FULL.
 import { createElement, useEffect, useState } from "react";
 import { getMockApi } from "../api/mockSingleton";
@@ -19,6 +20,10 @@ export interface MockKnobs {
   authExpiredOnStart?: boolean;
   noRecord?: boolean;
   syncStatus?: boolean;
+  /** Mock API shop knobs (src/api/mock.ts): queues of error codes, one per request. */
+  purchaseErrors?: string[];
+  equipErrors?: string[];
+  purchaseDelayMs?: number;
 }
 
 declare global {
@@ -44,6 +49,8 @@ const ROOM_ERRORS: Record<string, string> = { AAAAAA: "ROOM_NOT_FOUND", FFFFFF: 
 export function createMockUnity(): MockUnity {
   let emitJson: (json: string) => void = () => {};
   let token: string | null = null;
+  // Player 1's skin in an offline match (setEquippedSkin, like SkinSelection.Equipped in Unity).
+  let equipped = "human";
   let timers: ReturnType<typeof setTimeout>[] = [];
   let sceneListeners: ((s: Scene) => void)[] = [];
   let waitingForToken: (() => void) | null = null;
@@ -124,8 +131,12 @@ export function createMockUnity(): MockUnity {
         return;
       }
       switch (msg.type) {
+        case "setEquippedSkin":
+          equipped = String((msg.skin as { key?: string } | null)?.key ?? equipped);
+          break;
         case "init":
         case "setToken":
+          if (msg.type === "init") equipped = String((msg.equippedSkin as { key?: string } | null)?.key ?? "human");
           token = String(msg.accessToken);
           if (msg.type === "setToken" && waitingForToken) {
             const fn = waitingForToken;
@@ -135,7 +146,7 @@ export function createMockUnity(): MockUnity {
           }
           break;
         case "startOffline":
-          later(400, () => playMatch("offline", msg.mode as "1v1" | "2v2", `offline ${String(msg.mode)} ${String(msg.opponent)} map ${String(msg.map)}`));
+          later(400, () => playMatch("offline", msg.mode as "1v1" | "2v2", `offline ${String(msg.mode)} ${String(msg.opponent)} map ${String(msg.map)}, Player 1 skin ${equipped}`));
           break;
         case "startOnline": {
           const kind = msg.kind as "quick" | "createRoom" | "joinRoom";

@@ -1,5 +1,17 @@
 // Fetch wrapper for bombkicker-api: Bearer token, JSON, error codes, one silent re-login on 401.
-import type { ApiErrorBody, GuestLoginResponse, Me, MySkins, SkinDto } from "./types";
+import type {
+  ApiErrorBody,
+  GuestLoginResponse,
+  LedgerItem,
+  Leaderboard,
+  Me,
+  Mode,
+  MySkins,
+  Page,
+  PurchaseRequest,
+  PurchaseResponse,
+  SkinDto,
+} from "./types";
 
 export class ApiError extends Error {
   readonly status: number;
@@ -83,6 +95,13 @@ export function createApiClient(deps: ClientDeps) {
     me: () => request<Me>("/v1/me"),
     mySkins: () => request<MySkins>("/v1/me/skins"),
     skins: () => request<{ items: SkinDto[] }>("/v1/skins", { auth: false }).then((r) => r.items),
+    purchase: (body: PurchaseRequest) => request<PurchaseResponse>("/v1/shop/purchases", { method: "POST", body }),
+    equip: (skinKey: string) => request<{ equipped: string }>("/v1/me/equipped-skin", { method: "PATCH", body: { skinKey } }),
+    pointsHistory: (cursor?: string | null, limit = 20) =>
+      request<Page<LedgerItem>>(`/v1/me/points?limit=${limit}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`),
+    leaderboard: (mode: Mode, limit = 20) => request<Leaderboard>(`/v1/leaderboard?mode=${mode}&limit=${limit}`),
+    nameSuggestions: () => request<{ names: string[] }>("/v1/names/suggestions").then((r) => r.names),
+    setDisplayName: (displayName: string) => request<Me>("/v1/me", { method: "PATCH", body: { displayName } }),
   };
 }
 

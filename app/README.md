@@ -31,6 +31,16 @@ Mock knobs for tests and manual checks: `window.__BK_MOCK__` (see `src/unity/moc
    BK_DEV_FORCE_END_AFTER=30 BombKicker -batchmode -nographics -dedicatedServer` (same secrets as the API's `.dev.vars`).
 4. `BK_E2E_REAL=1 [BK_E2E_API=…] npx playwright test`.
 
+## Shop suite (SS-14)
+- Mock: `npx playwright test e2e/shop.mock.spec.ts` (all screens and every purchase error; knobs `purchaseErrors`,
+  `equipErrors`, `purchaseDelayMs` in `src/api/mock.ts`). Screenshots go to `BombKicker/.agents/tasks/skin-shop/react-shop/`
+  (`SHOP_SHOT_DIR`).
+- Real: bombkicker-api `skin-shop-admin` with `ADMIN_DEV_BYPASS=true`, its own DB migrated and `npm run db:seed-skins`,
+  wrangler dev on :8787 with `CORS_ORIGINS` = the preview origin (:8010), Unity build in `public/game/`, `npm run build`,
+  then `BK_E2E_REAL=1 npx playwright test e2e/shop.real.spec.ts`. The tests create their own skins through the admin API
+  (`race-*` stock 1, `tint-*` with the magenta sheet in `e2e/fixtures/`) and set them INACTIVE afterwards. Logins are
+  paced 6.5 s apart (guest login limit: 10 per 60 s per IP).
+
 ## Notes
 
 - Router: `ROUTER_MODE` in `src/config.ts` ("hash" for GitHub Pages, D10). The route stays out of the URL until Unity's

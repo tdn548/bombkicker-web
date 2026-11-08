@@ -13,6 +13,12 @@ interface PlayerData {
   mySkins: MySkins | null;
   refreshMe(): Promise<Me>;
   refreshSkins(): Promise<void>;
+  /** /v1/me, /v1/me/skins and /v1/skins together (after a purchase or an equip). UnitySync then sends setCatalog. */
+  refreshAll(): Promise<void>;
+  /** Apply a successful PATCH /v1/me/equipped-skin at once, so UnitySync sends setEquippedSkin before the refetch. */
+  setEquippedLocal(key: string): void;
+  /** Apply a successful PATCH /v1/me (name change). */
+  setMeLocal(me: Me): void;
 }
 
 const Ctx = createContext<PlayerData | null>(null);
@@ -47,6 +53,17 @@ export function PlayerDataProvider({ children }: { children: ReactNode }) {
     if (mine.status === "fulfilled") setMySkins(mine.value);
   }, [api, session]);
 
+  const refreshAll = useCallback(async () => {
+    await Promise.allSettled([refreshMe(), refreshSkins()]);
+  }, [refreshMe, refreshSkins]);
+
+  const setEquippedLocal = useCallback((key: string) => {
+    setMe((prev) => (prev.state === "ok" ? { state: "ok", data: { ...prev.data, equippedSkin: key } } : prev));
+    setMySkins((prev) => (prev ? { ...prev, equipped: key } : prev));
+  }, []);
+
+  const setMeLocal = useCallback((m: Me) => setMe({ state: "ok", data: m }), []);
+
   const playerId = session?.player.id;
   useEffect(() => {
     if (status !== "ready" || !playerId) return;
@@ -63,8 +80,11 @@ export function PlayerDataProvider({ children }: { children: ReactNode }) {
       mySkins,
       refreshMe,
       refreshSkins,
+      refreshAll,
+      setEquippedLocal,
+      setMeLocal,
     }),
-    [me, catalog, mySkins, refreshMe, refreshSkins],
+    [me, catalog, mySkins, refreshMe, refreshSkins, refreshAll, setEquippedLocal, setMeLocal],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
