@@ -135,6 +135,24 @@ export function parseFromUnity(json: unknown): FromUnity | null {
   }
 }
 
+/**
+ * For the "ignored Unity message" log: the type and size only. The raw JSON is not printed, because a message that
+ * fails to parse (for example "ready" with a wrong protocol version) can carry the legacy device id (SS-7 recheck).
+ */
+export function ignoredSummary(json: unknown): string {
+  if (typeof json !== "string") return `non-string ${typeof json}`;
+  let type = "?";
+  try {
+    const o: unknown = JSON.parse(json);
+    if (typeof o === "object" && o !== null && typeof (o as { type?: unknown }).type === "string") {
+      type = (o as { type: string }).type.slice(0, 32);
+    }
+  } catch {
+    type = "bad JSON";
+  }
+  return `type=${type} length=${json.length}`;
+}
+
 // ---------- queue ----------
 
 /**

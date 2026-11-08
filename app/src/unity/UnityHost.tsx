@@ -5,7 +5,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { Unity, useUnityContext } from "react-unity-webgl";
 import { UNITY_BUILD, UNITY_MAX_DPR } from "../config";
 import type { UnityBoot } from "../auth/deviceId";
-import { BRIDGE_EVENT, BRIDGE_METHOD, BRIDGE_OBJECT, BridgeQueue, parseFromUnity, redact, type FromUnity, type ToUnity } from "./bridge";
+import { BRIDGE_EVENT, BRIDGE_METHOD, BRIDGE_OBJECT, BridgeQueue, ignoredSummary, parseFromUnity, redact, type FromUnity, type ToUnity } from "./bridge";
 import { MockUnityStage, createMockUnity, type MockUnity } from "./mockUnity";
 
 /** "slow" copy appears after this long without ready (ux-spec 6.4). */
@@ -60,7 +60,7 @@ function useHostState(deliver: (json: string) => void) {
     (json: unknown) => {
       const msg = parseFromUnity(json);
       if (!msg) {
-        console.warn("[bridge] ignored Unity message", json);
+        console.warn("[bridge] ignored Unity message", ignoredSummary(json));
         return;
       }
       window.__BK_BRIDGE_LOG__?.push({ dir: "U->R", msg: msg.type === "ready" ? { ...msg, legacyDeviceId: msg.legacyDeviceId ? "(set)" : null } : msg });
