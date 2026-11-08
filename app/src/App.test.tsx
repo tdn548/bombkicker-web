@@ -55,7 +55,8 @@ describe("App with mock Unity", () => {
     fireEvent.click(screen.getByTestId("menu-offline"));
     await waitFor(() => expect(screen.getByTestId("start-offline").getAttribute("aria-disabled")).toBeNull());
     fireEvent.click(screen.getByTestId("start-offline"));
-    expect(sent("startOffline")[0]?.msg).toMatchObject({ mode: "1v1", opponent: "bots", map: 1 });
+    // the start waits for the catalog refetch (BUG-SS18-002), so it is not sent synchronously any more
+    await waitFor(() => expect(sent("startOffline")[0]?.msg).toMatchObject({ mode: "1v1", opponent: "bots", map: 1 }));
     await waitFor(() => expect(screen.getByTestId("unity-layer").className).toContain("visible"));
     await waitFor(() => expect(screen.getByTestId("result")).toBeTruthy(), { timeout: 3000 });
     expect(screen.getByTestId("unity-layer").className).not.toContain("visible");

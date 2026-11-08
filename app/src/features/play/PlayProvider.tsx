@@ -1,5 +1,7 @@
 // One play session at a time: Play Offline / Play Online -> Unity -> result screen. Owns when the Unity canvas is
 // visible. UI only displays state and sends bridge messages; the game and the API own the match and the points.
+// Before every start the catalog is refetched and sent to Unity (BUG-SS18-002): Unity draws a ticket skin key only if
+// it is in its catalog, so an open tab must learn about skins and sheet versions the admin added since it loaded.
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router";
 import type { Me, Mode } from "../../api/types";
@@ -9,6 +11,11 @@ import { useUnity } from "../../unity/UnityHost";
 import { applyStatus, mapOnlineError, startState, type OnlineStart, type OnlineState } from "./onlineFlow";
 import { pollForResult, type Before } from "./resultLogic";
 
+/**
+ * Longest wait for the GET /v1/skins refetch before a start. A failed or slow refetch never blocks play: the start
+ * goes out with the catalog Unity already has (a late answer still reaches Unity through UnitySync).
+ */
+export const CATALOG_REFRESH_TIMEOUT_MS = 3000;
 export interface OfflineSettings {
   mode: Mode;
   opponent: Opponent;
@@ -55,7 +62,7 @@ export function usePlay(): Play {
 
 export function PlayProvider({ children }: { children: ReactNode }) {
   const unity = useUnity();
-  const { boot, idle, send, subscribe, setVisible } = unity;
+  const { boot, idle, send, sentCatalog, subscribe, setVisible } = unity;
   const { me, refreshMe, refreshSkins } = usePlayerData();
   const navigate = useNavigate();
   const [stage, setStage] = useState<Stage>({ stage: "idle" });
@@ -77,6 +84,8 @@ export function PlayProvider({ children }: { children: ReactNode }) {
   // Points and matchesPlayed before the current online match. A ref, not state: Unity can answer startOnline
   // synchronously inside sendMessage, before React has re-rendered.
   const beforeRef = useRef<Before | null>(null);
+  // Bumped by every start and cancel: a start still waiting for its refetches is dropped once a newer one exists.
+  const sessionRef = useRef(0);
 
   const ready = boot.state === "ready";
   const canStart = ready && (stage.stage === "idle" || stage.stage === "result");
@@ -110,41 +119,57 @@ export function PlayProvider({ children }: { children: ReactNode }) {
     return m ? { points: m.points, matchesPlayed: m.stats.matchesPlayed } : null;
   }, [me, refreshMe]);
 
+  const syncCatalog = useCallback(async () => {
+    // BUG-SS18-002: fresh catalog to Unity before the start message (sendMessage keeps the order).
+    const fresh = await Promise.race([
+      refreshSkins().catch(() => null),
+      new Promise<null>((r) => setTimeout(() => r(null), CATALOG_REFRESH_TIMEOUT_MS)),
+    ]);
+    if (fresh && sentCatalog() !== fresh) send({ type: "setCatalog", catalog: fresh });
+  }, [refreshSkins, send, sentCatalog]);
+
   const startOnline = useCallback(
     (start: OnlineStart) => {
       if (!ready) return;
+      const session = ++sessionRef.current;
       pollAbort.current?.abort();
       startDelivered.current = false;
       beforeRef.current = null;
       const next: Stage = { stage: "online", online: startState(start) };
       go(next);
-      void snapshot().then((before) => {
+      void Promise.all([snapshot(), syncCatalog()]).then(([before]) => {
+        if (sessionRef.current !== session || stageRef.current.stage !== "online") return;
         beforeRef.current = before;
         const msg: ToUnity =
           start.kind === "joinRoom"
             ? { type: "startOnline", kind: "joinRoom", roomCode: start.roomCode }
             : { type: "startOnline", kind: start.kind, mode: start.mode };
-        if (stageRef.current.stage === "online") dispatch(msg);
+        dispatch(msg);
       });
     },
-    [ready, snapshot, dispatch, go],
+    [ready, snapshot, syncCatalog, dispatch, go],
   );
 
   const startOffline = useCallback(
     (settings: OfflineSettings) => {
       if (!ready) return;
+      const session = ++sessionRef.current;
       pollAbort.current?.abort();
       startDelivered.current = false;
       const next: Stage = { stage: "offline", settings };
       go(next);
-      setVisible(true);
-      dispatch({ type: "startOffline", mode: settings.mode, opponent: settings.opponent, map: settings.map });
+      void syncCatalog().then(() => {
+        if (sessionRef.current !== session || stageRef.current.stage !== "offline") return;
+        setVisible(true);
+        dispatch({ type: "startOffline", mode: settings.mode, opponent: settings.opponent, map: settings.map });
+      });
     },
-    [ready, setVisible, dispatch, go],
+    [ready, syncCatalog, setVisible, dispatch, go],
   );
 
   const cancelOnline = useCallback(() => {
     if (stageRef.current.stage !== "online") return;
+    sessionRef.current++;
     pending.current = null;
     if (startDelivered.current) send({ type: "cancelOnline" });
     startDelivered.current = false;
@@ -203,6 +228,8 @@ export function PlayProvider({ children }: { children: ReactNode }) {
           const next: Stage = { stage: "result", result };
           go(next);
           navigate("/result");
+          // Back on React screens: show skins the admin changed during the match (recorded matches refetch after the poll).
+          if (!(msg.recorded && before)) refreshSkins().catch(() => undefined);
           if (msg.recorded && before) {
             const ctrl = new AbortController();
             pollAbort.current = ctrl;

@@ -1,19 +1,19 @@
 // Keeps Unity in step with React: init once Unity is ready and the player is known, then setToken / setLang /
-// setEquippedSkin / setCatalog when those change (plan bridge table).
+// setEquippedSkin / setCatalog when those change (plan bridge table). PlayProvider also refetches the catalog and sends
+// setCatalog itself right before every start (BUG-SS18-002); sentCatalog() keeps the two from sending the same array.
 import { useEffect, useRef } from "react";
 import { useAuth } from "../auth/AuthProvider";
 import { useI18n } from "../i18n/I18nProvider";
 import { usePlayerData } from "../state/PlayerData";
 import type { Lang } from "./bridge";
-import type { SkinDto } from "../api/types";
 import { useUnity } from "./UnityHost";
 
 export function UnitySync() {
-  const { boot, send } = useUnity();
+  const { boot, send, sentCatalog } = useUnity();
   const { session } = useAuth();
   const { lang } = useI18n();
   const { me, meState, catalog, catalogState } = usePlayerData();
-  const sent = useRef<{ token: string; lang: Lang; equipped: string | null; catalog: SkinDto[] | null } | null>(null);
+  const sent = useRef<{ token: string; lang: Lang; equipped: string | null } | null>(null);
 
   const settled = (s: string) => s === "ok" || s === "error";
   const ready = boot.state === "ready" && session !== null && settled(meState) && settled(catalogState);
@@ -33,7 +33,7 @@ export function UnitySync() {
         catalog: catalog ?? [],
         lang,
       });
-      sent.current = { token: session.accessToken, lang, equipped: equippedDto?.key ?? null, catalog };
+      sent.current = { token: session.accessToken, lang, equipped: equippedDto?.key ?? null };
       return;
     }
     if (last.token !== session.accessToken) {
@@ -44,15 +44,12 @@ export function UnitySync() {
       send({ type: "setLang", lang });
       last.lang = lang;
     }
-    if (catalog && last.catalog !== catalog) {
-      send({ type: "setCatalog", catalog });
-      last.catalog = catalog;
-    }
+    if (catalog && sentCatalog() !== catalog) send({ type: "setCatalog", catalog });
     if (equippedDto && last.equipped !== equippedDto.key) {
       send({ type: "setEquippedSkin", skin: equippedDto });
       last.equipped = equippedDto.key;
     }
-  }, [ready, session, lang, catalog, equippedDto, send]);
+  }, [ready, session, lang, catalog, equippedDto, send, sentCatalog]);
 
   return null;
 }

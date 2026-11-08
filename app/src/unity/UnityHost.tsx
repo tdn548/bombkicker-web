@@ -7,6 +7,7 @@ import { UNITY_BUILD, UNITY_MAX_DPR } from "../config";
 import type { UnityBoot } from "../auth/deviceId";
 import { BRIDGE_EVENT, BRIDGE_METHOD, BRIDGE_OBJECT, BridgeQueue, ignoredSummary, parseFromUnity, redact, type FromUnity, type ToUnity } from "./bridge";
 import { MockUnityStage, createMockUnity, type MockUnity } from "./mockUnity";
+import type { SkinDto } from "../api/types";
 
 /** "slow" copy appears after this long without ready (ux-spec 6.4). */
 export const SLOW_LOAD_MS = 20000;
@@ -22,6 +23,11 @@ export interface UnityApi {
   visible: boolean;
   setVisible(visible: boolean): void;
   send(msg: ToUnity): void;
+  /**
+   * The catalog array last handed to Unity (init or setCatalog), by identity. UnitySync and PlayProvider both send
+   * setCatalog; each skips an array that was already sent, so the same fetch never goes to Unity twice.
+   */
+  sentCatalog(): readonly SkinDto[] | null;
   /** Subscribe to parsed Unity messages; returns the unsubscribe function. */
   subscribe(handler: (msg: FromUnity) => void): () => void;
 }
@@ -42,6 +48,7 @@ function useHostState(deliver: (json: string) => void) {
   const [slow, setSlow] = useState(false);
   const handlers = useRef(new Set<(msg: FromUnity) => void>());
   const [queue] = useState(() => new BridgeQueue());
+  const catalogRef = useRef<readonly SkinDto[] | null>(null);
   useEffect(() => {
     queue.connect((json, msg) => {
       if (import.meta.env.DEV) console.debug("[bridge] R->U", redact(msg));
@@ -81,10 +88,12 @@ function useHostState(deliver: (json: string) => void) {
   const send = useCallback(
     (msg: ToUnity) => {
       if (msg.type === "startOffline" || msg.type === "startOnline") setIdle(false);
+      if (msg.type === "init" || msg.type === "setCatalog") catalogRef.current = msg.catalog;
       queue.send(msg);
     },
     [queue],
   );
+  const sentCatalog = useCallback(() => catalogRef.current, []);
 
   const subscribe = useCallback((h: (msg: FromUnity) => void) => {
     handlers.current.add(h);
@@ -93,7 +102,7 @@ function useHostState(deliver: (json: string) => void) {
     };
   }, []);
 
-  return { boot, setBoot, idle, visible, setVisible, slow, receive, send, subscribe };
+  return { boot, setBoot, idle, visible, setVisible, slow, receive, send, sentCatalog, subscribe };
 }
 
 function RealUnityHost({ children }: { children: ReactNode }) {
@@ -139,10 +148,10 @@ function RealUnityHost({ children }: { children: ReactNode }) {
 }
 
 function useApi(host: ReturnType<typeof useHostState>, progress: number, isLoaded: boolean): UnityApi {
-  const { boot, idle, visible, setVisible, slow, send, subscribe } = host;
+  const { boot, idle, visible, setVisible, slow, send, sentCatalog, subscribe } = host;
   return useMemo(
-    () => ({ boot, progress, isLoaded, slow: slow && boot.state === "loading", idle, visible, setVisible, send, subscribe }),
-    [boot, progress, isLoaded, slow, idle, visible, setVisible, send, subscribe],
+    () => ({ boot, progress, isLoaded, slow: slow && boot.state === "loading", idle, visible, setVisible, send, sentCatalog, subscribe }),
+    [boot, progress, isLoaded, slow, idle, visible, setVisible, send, sentCatalog, subscribe],
   );
 }
 

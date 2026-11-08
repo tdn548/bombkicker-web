@@ -12,7 +12,8 @@ interface PlayerData {
   catalogState: Load<SkinDto[]>["state"];
   mySkins: MySkins | null;
   refreshMe(): Promise<Me>;
-  refreshSkins(): Promise<void>;
+  /** Refetch /v1/skins (and /v1/me/skins). Resolves with the fresh catalog, or null if /v1/skins failed (the old one stays). */
+  refreshSkins(): Promise<SkinDto[] | null>;
   /** /v1/me, /v1/me/skins and /v1/skins together (after a purchase or an equip). UnitySync then sends setCatalog. */
   refreshAll(): Promise<void>;
   /** Apply a successful PATCH /v1/me/equipped-skin at once, so UnitySync sends setEquippedSkin before the refetch. */
@@ -48,9 +49,13 @@ export function PlayerDataProvider({ children }: { children: ReactNode }) {
 
   const refreshSkins = useCallback(async () => {
     const [items, mine] = await Promise.allSettled([api.skins(), session ? api.mySkins() : Promise.reject(new Error("no session"))]);
-    if (items.status === "fulfilled") setCatalog({ state: "ok", data: items.value });
-    else setCatalog((prev) => (prev.state === "ok" ? prev : { state: "error" }));
     if (mine.status === "fulfilled") setMySkins(mine.value);
+    if (items.status === "fulfilled") {
+      setCatalog({ state: "ok", data: items.value });
+      return items.value;
+    }
+    setCatalog((prev) => (prev.state === "ok" ? prev : { state: "error" }));
+    return null;
   }, [api, session]);
 
   const refreshAll = useCallback(async () => {
