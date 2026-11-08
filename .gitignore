@@ -1,4 +1,5 @@
-# scripts/build-site.sh output (published by scripts/deploy-commit.sh, never committed here)
+# scripts/build-site.sh output (dist-site: published by scripts/deploy-commit.sh; dist-local: local test builds; never committed here)
 /dist-site/
 /dist-preview/
 .DS_Store
+/dist-local/

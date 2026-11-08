@@ -4,11 +4,14 @@
 //   B. same browser profile, same port and path, now the new site (a deploy commit or build-site.sh output)
 //      -> React adopts Unity's legacy device id; GET /v1/me must return the same player id
 //   C. (unless --no-offline) offline 1v1 bots match in the new site -> result -> back to the menu
+//   During B and C every CSP violation (securitypolicyviolation event or console report) fails the run.
 //
 //   node scripts/rehearse-migration.mjs --old <folder> --new <folder> [--port 8000] [--host localhost] [--api http://<host>:8787]
 //        [--out <screenshot dir>] [--no-offline] [--headed]
 // Needs: app/node_modules (npm ci in app/) with Playwright's Chromium, and a local bombkicker-api on :8787 whose
 // CORS_ORIGINS has http://localhost:<port> (Unity and React send localhost pages to localhost:8787).
+// --new must be a local test build (SEC-014): scripts/build-site.sh --unity <Builds/Web> --local-api http://localhost:8787
+// (a production build's CSP blocks the local API). A site without a CSP is accepted, with a note.
 import { spawn } from "node:child_process";
 import fs from "node:fs";
 import { createRequire } from "node:module";
@@ -34,6 +37,22 @@ const offline = !args.includes("--no-offline");
 if (!oldDir || !newDir) {
   console.error("usage: node scripts/rehearse-migration.mjs --old <folder> --new <folder> [--port 8000]");
   process.exit(2);
+}
+// SEC-014: the new site's CSP must allow the API this rehearsal uses, so it must be a --local-api build.
+{
+  const html = fs.readFileSync(path.join(newDir, "index.html"), "utf8");
+  const csp = /<meta[^>]*http-equiv="Content-Security-Policy"[^>]*content="([^"]*)"/i.exec(html)?.[1] ?? null;
+  const vf = path.join(newDir, "version.json");
+  const v = fs.existsSync(vf) ? JSON.parse(fs.readFileSync(vf, "utf8")) : {};
+  if (csp === null) console.warn(`note: ${newDir} has no CSP meta (built before react-security?)`);
+  else if (v.local !== true) {
+    console.error(`${newDir} is a production build (version.json local != true): its CSP blocks ${api}.\n` +
+      `Build it with: scripts/build-site.sh --unity <Builds/Web> --local-api ${api}`);
+    process.exit(2);
+  } else if (!csp.split(";").find((d) => d.trim().startsWith("connect-src"))?.split(/\s+/).includes(new URL(api).origin)) {
+    console.error(`${newDir} CSP connect-src does not allow ${api} (built with --local-api ${v.localApi})`);
+    process.exit(2);
+  }
 }
 fs.mkdirSync(outDir, { recursive: true });
 const url = `http://${host}:${port}/bombkicker-web/`;
@@ -116,7 +135,16 @@ try {
   // A returning player after GitHub Pages' max-age=600 has passed: HTTP cache gone, IndexedDB and localStorage kept.
   const cdp = await ctx.newCDPSession(page);
   await cdp.send("Network.clearBrowserCache");
-  await page.addInitScript(() => { window.__BK_BRIDGE_LOG__ = []; });
+  // Reported to Node (exposeFunction survives navigations), so B and C are both covered.
+  const cspEvents = [];
+  await page.exposeFunction("__bkCspViolation", (v) => cspEvents.push(v));
+  await page.addInitScript(() => {
+    window.__BK_BRIDGE_LOG__ = [];
+    document.addEventListener("securitypolicyviolation", (e) =>
+      window.__bkCspViolation({ directive: e.effectiveDirective, blocked: e.blockedURI, source: e.sourceFile }));
+  });
+  const cspConsole = [];
+  page.on("console", (m) => { if (/Content Security Policy|Content-Security-Policy/i.test(m.text())) cspConsole.push(m.text().slice(0, 300)); });
   const newLogins = [];
   let me = null;
   page.on("response", async (r) => {
@@ -130,6 +158,7 @@ try {
   await page.goto(url);
   const version = await (await fetch(`${url}version.json`)).json();
   result.new_site_version = version;
+  result.csp = await page.evaluate(() => document.querySelector('meta[http-equiv="Content-Security-Policy"]')?.getAttribute("content") ?? null);
   await page.getByTestId("menu-offline").waitFor({ timeout: 180_000 });
   await page.waitForFunction(() => document.querySelector('[data-testid="menu-offline"]')?.getAttribute("aria-disabled") !== "true", null, { timeout: 180_000 });
   while (!me && Date.now() - tB < 30_000) await page.waitForTimeout(250);
@@ -172,6 +201,10 @@ try {
     log("C: offline match ended", ended, line);
     if (ended?.kind !== "offline" || ended?.recorded !== false) exit = 1;
   }
+  await page.waitForTimeout(1000); // let a last report arrive
+  result.cspViolations = { events: cspEvents, console: cspConsole, count: cspEvents.length + cspConsole.length };
+  log(`CSP violations: ${result.cspViolations.count}`);
+  if (result.cspViolations.count > 0) exit = 1;
 } catch (e) {
   result.error = String(e?.stack ?? e);
   console.error(e);
