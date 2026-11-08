@@ -91,3 +91,52 @@ test("CSP meta: Unity boots, an equipped skin loads in an offline match, no viol
     expect(consoleLines.filter((l) => l.includes(secret))).toEqual([]);
   }
 });
+
+// BUG-SS18-001: Unity's WebSocket to the game server must pass connect-src. Production builds allow
+// wss://*.pr.edgegap.net:*; a build-site.sh --local-api build also allows ws/wss to localhost and 127.0.0.1 (any port).
+// Setup: the API with an Edgegap emulator that starts a Mac dev dedicated server per deployment and reports
+// wss://127.0.0.1:<port> (BombKicker .agents/tasks/skin-shop/qa-run/tools/edgegap-emu.mjs, a TLS front with a local test
+// CA, hence ignoreHTTPSErrors), or QUICKMATCH_1V1_HOST/PORT pointing at a local dedicated server. Run it against the
+// build-site.sh output: `scripts/serve-site.sh dist-local --port 8000`, then BK_E2E_REAL=1 BK_E2E_PORT=8000.
+// A dev server started with BK_DEV_FORCE_END_AFTER ends the match early; otherwise it runs its full 150 s.
+test.describe("game server WebSocket", () => {
+  test.use({ ignoreHTTPSErrors: true });
+  test("CSP meta: a 1v1 quick match connects to the game server and starts, no violation", async ({ page }) => {
+    test.setTimeout(600_000);
+    const sockets: string[] = [];
+    const consoleLines: string[] = [];
+    page.on("websocket", (ws) => sockets.push(ws.url()));
+    page.on("console", (m) => consoleLines.push(m.text()));
+    await setup(page);
+    await page.goto("./#/play/online");
+    const csp = await page.evaluate(() => document.querySelector('meta[http-equiv="Content-Security-Policy"]')?.getAttribute("content") ?? "");
+    const connect = csp.split(";").find((d) => d.trim().startsWith("connect-src")) ?? "";
+    expect(connect.split(/\s+/)).toContain("wss://*.pr.edgegap.net:*");
+    await expect(page.getByTestId("quick-match")).not.toHaveAttribute("aria-disabled", { timeout: UNITY_READY });
+    await page.getByTestId("quick-match").click();
+    const phase = async () => {
+      const log = await bridgeLog(page);
+      const s = log.filter((e) => e.dir === "U->R" && e.msg.type === "status").map((e) => e.msg as { phase: string; code?: string });
+      return s.some((m) => m.phase === "inMatch") ? "inMatch" : (s.find((m) => m.phase === "error")?.code ?? (s.some((m) => m.phase === "error") ? "error" : "pending"));
+    };
+    // searching -> starting (server deploy) -> connecting -> waiting (bot fill) -> loading -> inMatch
+    await expect.poll(phase, { timeout: 240_000, intervals: [1000] }).not.toBe("pending");
+    // One server slot locally (EDGEGAP_MAX_CONCURRENT=1): the previous test's server may still be stopping. Retry like a
+    // player would ("Thử lại"), at most 6 times 20 s apart.
+    for (let i = 0; i < 6 && (await phase()) === "SERVERS_FULL"; i++) {
+      await page.waitForTimeout(20_000);
+      await page.evaluate(() => (window.__BK_BRIDGE_LOG__ = []));
+      await page.getByTestId("online-error").locator("..").getByRole("button").first().click();
+      await expect.poll(phase, { timeout: 240_000, intervals: [1000] }).not.toBe("pending");
+    }
+    expect(await phase(), `online error: ${JSON.stringify(await page.evaluate(() => window.__BK_CSPV__))}`).toBe("inMatch");
+    await expect(page.getByTestId("unity-layer")).toHaveClass(/visible/);
+    expect(sockets.filter((u) => /^wss?:\/\//.test(u)).length, `WebSockets: ${sockets.join(", ")}`).toBeGreaterThan(0);
+    await page.waitForTimeout(5000); // a few seconds of online play under the policy
+    expect(await page.evaluate(() => window.__BK_CSPV__)).toEqual([]);
+    expect(consoleLines.filter((l) => /Content Security Policy|Refused to/i.test(l))).toEqual([]);
+    await expect.poll(async () => (await bridgeLog(page)).some((e) => e.dir === "U->R" && e.msg.type === "matchEnded"), { timeout: 240_000, intervals: [2000] }).toBe(true);
+    await expect(page.getByTestId("result")).toBeVisible();
+    expect(await page.evaluate(() => window.__BK_CSPV__)).toEqual([]);
+  });
+});
