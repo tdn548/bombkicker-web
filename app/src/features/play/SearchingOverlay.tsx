@@ -47,6 +47,19 @@ function OverlayBody({ online }: { online: OnlineState }) {
   useEffect(() => {
     (error ? actionRef.current : titleRef.current)?.focus();
   }, [error]);
+  // BUG-SS18-003, ux-spec 8.3 "Esc closes sheets and dialogs": Esc on an error closes it like Close / Đóng
+  // (back to the idle Play Online screen, 9.3). The searching states keep their explicit Cancel button.
+  const { dismissError } = play;
+  useEffect(() => {
+    if (!error) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      e.preventDefault();
+      dismissError();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [error, dismissError]);
 
   const params = {
     roomCode: online.roomCode ?? "",
