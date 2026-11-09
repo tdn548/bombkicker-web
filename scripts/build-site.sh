@@ -87,16 +87,20 @@ done
 ls "$unity_dir"/Build/*.br >/dev/null 2>&1 && die "Brotli files in $unity_dir/Build: GitHub Pages cannot serve them"
 
 # --- Provenance ---
-git_info() { # <dir> -> "commit dirty" for the repo containing <dir>
+git_info() { # <dir> [pathspec...] -> "commit dirty" for the repo containing <dir>
   local dir="$1" commit dirty
+  shift
   commit="$(git -C "$dir" rev-parse HEAD 2>/dev/null)" || { echo "unknown false"; return; }
-  if [ -n "$(git -C "$dir" status --porcelain --untracked-files=no 2>/dev/null)" ]; then dirty=true; else dirty=false; fi
+  if [ -n "$(git -C "$dir" status --porcelain --untracked-files=no -- "$@" 2>/dev/null)" ]; then dirty=true; else dirty=false; fi
   echo "$commit $dirty"
 }
+# Unity: .vscode/ is editor config (Unity rewrites dotnet.defaultSolution to the worktree folder name on open),
+# not a build input, so it does not make the build dirty.
+unity_paths=(":/" ":(exclude,top).vscode")
 read -r react_commit react_dirty < <(git_info "$repo")
-read -r unity_commit unity_dirty < <(git_info "$unity_dir")
+read -r unity_commit unity_dirty < <(git_info "$unity_dir" "${unity_paths[@]}")
 [ "$unity_commit" != "unknown" ] || die "$unity_dir is not inside a git repo, so the Unity commit is unknown"
-unity_changes="$(git -C "$unity_dir" diff --name-only HEAD || true)"
+unity_changes="$(git -C "$unity_dir" diff --name-only HEAD -- "${unity_paths[@]}" || true)"
 if [ "$allow_dirty" -eq 0 ]; then
   [ "$react_dirty" = false ] || die "bombkicker-web has uncommitted changes (commit them, or --allow-dirty for a local test)"
   [ "$unity_dirty" = false ] || die "Unity repo has uncommitted changes:
