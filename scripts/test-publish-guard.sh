@@ -123,6 +123,22 @@ expect 1 "--local-api with another port"                 "$B" --unity /nonexiste
 expect 1 "--local-api with a path"                       "$B" --unity /nonexistent --local-api http://192.168.1.20:8787/v1
 expect 1 "production build with VITE_API_URL set"        env VITE_API_URL=http://localhost:8787 "$B" --unity /nonexistent
 expect 1 "production build with BK_CSP_LOCAL_API set"    env BK_CSP_LOCAL_API=1 "$B" --unity /nonexistent
+# SEC-004: fake Unity builds (gzip files, outside any git repo) for the dev-hook refusal
+fake_unity() { # <dir> <marker text or ""> -> a Builds/Web-like folder
+  local d="$tmp/$1" f; mkdir -p "$d/Build" "$d/StreamingAssets"
+  echo "loader" > "$d/Build/Web.loader.js"
+  for f in Web.data Web.framework.js Web.wasm; do printf 'unity %s %s\n' "$f" "$2" | gzip -c > "$d/Build/$f.unityweb"; done
+  echo "$d"
+}
+dev_dir="$(fake_unity WebDev "")"
+dev_marker="$(fake_unity dev-marker "class DevForceMatchEnd devForceEnd")"
+clean_unity="$(fake_unity Web "")"
+expect 1 "production build from a Builds/WebDev folder"  "$B" --unity "$dev_dir"
+expect 1 "production build of a BK_DEV_HOOKS build"      "$B" --unity "$dev_marker"
+out="$("$B" --unity "$clean_unity" 2>&1)"
+case "$out" in *"not inside a git repo"*) ok "production build of a release-like build passes the dev-hook check (stops later at git)" ;; *) ko "release-like build refused" "$out" ;; esac
+out="$("$B" --unity "$dev_marker" --local-api http://localhost:8787 2>&1)"
+case "$out" in *"not inside a git repo"*) ok "--local-api test build may use the dev-hook build (stops later at git)" ;; *) ko "local test build refused the dev build" "$out" ;; esac
 out="$("$B" --unity /nonexistent --local-api http://192.168.1.20:8787 2>&1)"
 case "$out" in *"Unity build folder not found"*) ok "--local-api http://192.168.1.20:8787 accepted (stops later at --unity)" ;; *) ko "LAN origin not accepted" "$out" ;; esac
 

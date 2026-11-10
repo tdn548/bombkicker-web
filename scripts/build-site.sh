@@ -85,6 +85,18 @@ for f in "$unity_dir"/Build/*.unityweb; do
   [ "$(head -c 2 "$f" | od -An -tx1 | tr -d ' \n')" = "1f8b" ] || die "$f is not gzip; build with WebBuild.BuildWeb (gzip + decompression fallback)"
 done
 ls "$unity_dir"/Build/*.br >/dev/null 2>&1 && die "Brotli files in $unity_dir/Build: GitHub Pages cannot serve them"
+# SEC-004 (relay-rooms): the dev-hook build (WebBuild.BuildWebDev, BK_DEV_HOOKS: ?devForceEnd= lets a room host end
+# every match as a win) has the same file names as the release build. A production build refuses it by folder name
+# and by content (the hook's class and URL parameter names are in the decompressed data/wasm of the dev build only).
+if [ -z "$local_api" ]; then
+  case "$unity_dir" in */WebDev|*/WebDev/*) die "$unity_dir is the dev-hook build (WebBuild.BuildWebDev); publish the WebBuild.BuildWeb output (Builds/Web)" ;; esac
+  for f in "$unity_dir/Build/Web.data.unityweb" "$unity_dir/Build/Web.wasm.unityweb"; do
+    # `|| true`: grep -q stops at the first match and gzip then dies of SIGPIPE, which pipefail would turn into "no match"
+    if { gzip -dc "$f" 2>/dev/null || true; } | LC_ALL=C grep -a -q -E 'DevForceMatchEnd|devForceEnd'; then
+      die "$f contains the BK_DEV_HOOKS dev hooks (DevForceMatchEnd/devForceEnd); publish the WebBuild.BuildWeb output, not BuildWebDev"
+    fi
+  done
+fi
 
 # --- Provenance ---
 git_info() { # <dir> [pathspec...] -> "commit dirty" for the repo containing <dir>

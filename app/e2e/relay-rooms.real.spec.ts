@@ -16,6 +16,17 @@ const ADMIN = { "X-Requested-With": "bombkicker-admin" };
 const UNITY_READY = 180_000;
 
 type Player = { page: Page; logs: string[]; id: string; token: string };
+// Evidence for the CSP: every Unity Services / Unity Relay endpoint the pages use (host + path shape) and every CSP
+// violation the pages report. The page CSP stays on (BK_CSP_LOCAL_API build = production sources + local API).
+const unityEndpoints = new Set<string>();
+const cspViolations: string[] = [];
+const endpointShape = (u: string) => {
+  const url = new URL(u);
+  if (!/(\.|^)unity3d\.com$|(\.|^)unity\.com$/.test(url.hostname)) return null;
+  const host = url.hostname.replace(/^\d+\.(.+\.relay\.uf\.unity3d\.com)$/, "<allocation>.$1");
+  const p = url.pathname.replace(/[0-9a-f-]{20,}|[A-Za-z0-9]{20,}/g, "<id>");
+  return `${url.protocol}//${host}${url.port ? `:${url.port}` : ""}${p}`;
+};
 
 async function routeApi(page: Page) {
   if (API === "http://localhost:8787") return;
@@ -23,7 +34,10 @@ async function routeApi(page: Page) {
     const url = route.request().url().replace(/^http:\/\/localhost:8787/, API);
     try {
       const body = route.request().postDataBuffer();
-      await route.fulfill({ response: await route.fetch(body ? { url, postData: body } : { url }) });
+      // Host stays localhost:8787: the API builds the skin sheet URLs from it, so the page fetches them from the origin
+      // its CSP allows (and this route forwards them too), as it would with the API on :8787
+      const headers = { ...route.request().headers(), host: "localhost:8787" };
+      await route.fulfill({ response: await route.fetch(body ? { url, headers, postData: body } : { url, headers }) });
     } catch {
       await route.abort().catch(() => undefined);
     }
@@ -46,8 +60,20 @@ async function openPlayer(context: BrowserContext, query = ""): Promise<Player> 
     const t = m.text().split("\n")[0]!.trim(); // Unity adds a line break (and sometimes a stack) after the message
     if (/^\[(Relay|Skin|Embedded)\]/.test(t)) logs.push(t);
   });
+  page.on("request", (r) => {
+    const s = endpointShape(r.url());
+    if (s) unityEndpoints.add(`${r.method()} ${s}`);
+  });
+  page.on("websocket", (ws) => {
+    const s = endpointShape(ws.url());
+    if (s) unityEndpoints.add(`WS ${s}`);
+  });
+  await page.exposeFunction("__bkCspViolation", (v: string) => cspViolations.push(v));
   await page.addInitScript(() => {
     window.__BK_BRIDGE_LOG__ = [];
+    document.addEventListener("securitypolicyviolation", (e) => {
+      (window as unknown as { __bkCspViolation: (v: string) => void }).__bkCspViolation(`${e.violatedDirective} ${e.blockedURI}`);
+    });
   });
   await routeApi(page);
   await page.goto(`./${query}#/play/online`);
@@ -192,7 +218,12 @@ test("relay rooms: create, join by code, API skins, result once, revoke, joiner 
     const rejoin = await request.post(`${API}/v1/relay-rooms/join`, { headers: { Authorization: `Bearer ${b.token}` }, data: { roomCode: codeD } });
     expect(rejoin.status()).toBe(404);
     console.log(`relay e2e: match a ${ids.a}, match c ${ids.c}, match d ${ids.d} (not recorded)`);
+    // the Relay traffic really went through the Unity Relay WebSocket, and the page CSP blocked nothing
+    expect([...unityEndpoints].some((e) => /^WS wss:\/\/<allocation>\.[a-z0-9-]+\.relay\.uf\.unity3d\.com:\d+\//.test(e))).toBe(true);
+    expect(cspViolations).toEqual([]);
   } finally {
+    console.log(`relay e2e: Unity endpoints seen:\n${[...unityEndpoints].sort().join("\n")}`);
+    console.log(`relay e2e: CSP violations: ${cspViolations.length}${cspViolations.length ? `\n${cspViolations.join("\n")}` : ""}`);
     for (const [k, p] of Object.entries(players)) console.log(`--- ${k} Unity log (last 40):\n${p.logs.slice(-40).join("\n")}`);
     await ctxA.close();
     await ctxB.close();
