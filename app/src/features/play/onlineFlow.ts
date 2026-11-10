@@ -60,7 +60,17 @@ export function mapOnlineError(code: string | undefined, message?: string): Onli
     case "ROOM_FULL":
       return { code: c, key: "err.room.full", actions: ["close"] };
     case "SERVER_GONE":
+    case "ROOM_STARTED":
       return { code: c, key: "err.room.started", actions: ["close"] };
+    // Relay rooms (D5b): codes from the API (MODE_MISMATCH) and from Unity (ROOM_CLOSED, HOST_LEFT, RELAY_UNAVAILABLE)
+    case "ROOM_CLOSED":
+      return { code: c, key: "err.room.closed", actions: ["close"] };
+    case "HOST_LEFT":
+      return { code: c, key: "err.room.hostLeft", actions: ["close"] };
+    case "RELAY_UNAVAILABLE":
+      return { code: c, key: "err.room.relay", actions: ["retry", "close"] };
+    case "MODE_MISMATCH":
+      return { code: c, key: "err.room.mode", actions: ["close"] };
     default:
       return { code: c || "UNKNOWN", key: "err.online.network", actions: ["retry", "close"] };
   }
@@ -92,6 +102,8 @@ export function overlayView(state: OnlineState): OverlayView {
 
   if (phase === "loading") return { ...base, title: "online.loading", body: null, buttons: [], cancelNote: false, codeLine: hasCode };
   if (phase === "waiting") {
+    // Relay rooms have no bots, so no countdown: the room starts when it is full.
+    if (room && hasCode && state.status?.seconds === undefined) return { ...base, title: "online.roomWaiting", body: "online.roomWaitingFriendsBody", buttons: roomButtons };
     if (room && hasCode) return { ...base, title: "online.roomWaiting", body: "online.roomWaitingBody", buttons: roomButtons, countdown: true };
     return { ...base, title: "online.quickWaiting", body: "online.quickWaitingBody", buttons: ["cancel"], countdown: true };
   }

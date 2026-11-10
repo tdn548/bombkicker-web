@@ -76,6 +76,7 @@ export function PlayOnline() {
         <h2 id={`${codeId}-h`} className="card__title">
           {t("online.roomSection")}
         </h2>
+        <p className="note">{t("online.roomNote")}</p>
         <Button variant="secondary" off={gate.off} onClick={() => play.startOnline({ kind: "createRoom", mode })} data-testid="create-room">
           {t("online.create")}
         </Button>

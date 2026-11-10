@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { App } from "./App";
 import { createMockApi } from "./api/mock";
 import { isMockMode } from "./config";
-import { LOCAL_API_ORIGINS, PRODUCTION_API_URL, apiOrigins, buildCsp, cspMetaTag, gameServerSources, originOf } from "./csp";
+import { LOCAL_API_ORIGINS, PRODUCTION_API_URL, UNITY_SOURCES, apiOrigins, buildCsp, cspMetaTag, gameServerSources, originOf } from "./csp";
 import { isFramed, renderFramedNotice } from "./frameGuard";
 import { createGatedHistory } from "./router/gatedHistory";
 import { ignoredSummary, parseFromUnity } from "./unity/bridge";
@@ -15,14 +15,18 @@ describe("CSP (src/csp.ts)", () => {
     expect(p).toContain("script-src 'self' blob: 'wasm-unsafe-eval'");
     expect(p).toContain("worker-src 'self' blob:");
     // BUG-SS18-001: Unity's WebSocket to the Edgegap game server (wss://<id>.pr.edgegap.net:<dynamic port>)
-    expect(p).toContain(`connect-src 'self' ${PRODUCTION_API_URL} wss://*.pr.edgegap.net:*;`);
+    // relay rooms (D5b): Unity Services and the Relay servers, captured from the WebGL client (csp.ts header)
+    const unity =
+      "https://player-auth.services.api.unity.com https://lobby.services.api.unity.com https://relay-allocations.services.api.unity.com" +
+      " wss://wire.unity3d.com wss://*.relay.uf.unity3d.com:*";
+    expect(p).toContain(`connect-src 'self' ${PRODUCTION_API_URL} wss://*.pr.edgegap.net:* ${unity};`);
     expect(p).toContain(`img-src 'self' data: blob: ${PRODUCTION_API_URL};`);
     expect(p).toContain("style-src 'self';");
     expect(p).toContain("object-src 'none'");
     expect(p).toContain("base-uri 'none'");
     expect(p).not.toMatch(/'unsafe-inline'|'unsafe-eval'|localhost|127\.0\.0\.1|ws:/);
-    // the only wildcards are the Edgegap subdomain and its port
-    expect(p.replace("wss://*.pr.edgegap.net:*", "")).not.toContain("*");
+    // the only wildcards are the Edgegap and Unity Relay subdomains and their ports
+    expect(p.replace("wss://*.pr.edgegap.net:*", "").replace("wss://*.relay.uf.unity3d.com:*", "")).not.toContain("*");
     expect(buildCsp(apiOrigins({}))).toBe(p); // the default game servers are the production ones
   });
   it("game server WebSockets: Edgegap always; local hosts only for a local build (BK_CSP_LOCAL_API=1)", () => {
@@ -39,7 +43,7 @@ describe("CSP (src/csp.ts)", () => {
       expect(gameServerSources({ BK_CSP_LOCAL_API: "1", VITE_API_URL: other })).toEqual(local);
     }
     const p = buildCsp(apiOrigins({ BK_CSP_LOCAL_API: "1" }), gameServerSources({ BK_CSP_LOCAL_API: "1" }));
-    expect(p).toContain(`connect-src 'self' ${PRODUCTION_API_URL} ${LOCAL_API_ORIGINS.join(" ")} ${local.join(" ")};`);
+    expect(p).toContain(`connect-src 'self' ${PRODUCTION_API_URL} ${LOCAL_API_ORIGINS.join(" ")} ${local.join(" ")} ${UNITY_SOURCES.join(" ")};`);
     expect(p).toContain(`img-src 'self' data: blob: ${PRODUCTION_API_URL} ${LOCAL_API_ORIGINS.join(" ")};`);
   });
   it("local test builds add only what is asked for", () => {

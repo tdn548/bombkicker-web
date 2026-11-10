@@ -52,4 +52,32 @@ describe("online error dialog (BUG-SS18-003)", () => {
     fireEvent.keyDown(document, { key: "Escape" });
     await waitFor(() => expect(screen.queryByTestId("searching-overlay")).toBeNull());
   });
+
+  it("relay room: create shows the code and the friends copy without a bot countdown (D5b)", async () => {
+    setup();
+    await loaded();
+    fireEvent.click(screen.getByTestId("menu-online"));
+    expect(screen.getByText("Phòng bắt đầu khi đủ người. Phòng không có bot.")).toBeTruthy();
+    await waitFor(() => expect(screen.getByTestId("create-room").getAttribute("aria-disabled")).toBeNull());
+    fireEvent.click(screen.getByTestId("create-room"));
+    await waitFor(() => expect(screen.getByTestId("searching-overlay").getAttribute("data-phase")).toBe("waiting"), { timeout: 5000 });
+    expect(screen.getByTestId("searching-overlay").textContent).toContain("Đang chờ bạn bè…");
+    expect(screen.getByTestId("searching-overlay").textContent).not.toMatch(/Bot|giây/);
+    expect(screen.getByTestId("room-code-display").textContent).toBe("K7M2QX");
+  });
+
+  it.each([
+    ["CCCCCC", "ROOM_CLOSED", "Phòng CCCCCC đã đóng."],
+    ["GGGGGG", "ROOM_STARTED", "Phòng GGGGGG đã bắt đầu trận. Hãy nhờ bạn tạo phòng mới."],
+    ["RRRRRR", "RELAY_UNAVAILABLE", "Không kết nối được dịch vụ phòng. Kiểm tra mạng rồi thử lại."],
+  ])("join %s -> %s with its copy", async (code, errorCode, text) => {
+    setup();
+    await loaded();
+    fireEvent.click(screen.getByTestId("menu-online"));
+    fireEvent.change(screen.getByTestId("room-code"), { target: { value: code } });
+    await waitFor(() => expect(screen.getByTestId("join-room").getAttribute("aria-disabled")).toBeNull());
+    fireEvent.click(screen.getByTestId("join-room"));
+    await waitFor(() => expect(screen.getByTestId("online-error").getAttribute("data-code")).toBe(errorCode), { timeout: 5000 });
+    expect(screen.getByTestId("online-error").textContent).toBe(text);
+  });
 });

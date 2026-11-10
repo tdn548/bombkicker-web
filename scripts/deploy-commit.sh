@@ -12,8 +12,9 @@
 #
 # Publish check (SEC-014), before anything in the repo changes. Refused:
 #   - version.json says "local": true or has a localApi (build-site.sh --local-api: a local test build)
-#   - --site: index.html has no Content-Security-Policy meta, or its connect-src lacks the production API or the
-#     Edgegap game servers (wss://*.pr.edgegap.net:*, BUG-SS18-001: without it online play cannot connect)
+#   - --site: index.html has no Content-Security-Policy meta, or its connect-src lacks the production API, the
+#     Edgegap game servers (wss://*.pr.edgegap.net:*, BUG-SS18-001: without it online play cannot connect) or the Unity
+#     Services / Unity Relay sources of relay rooms (D5b: without them rooms cannot be created or joined)
 #   - the policy names an http: or ws: source, localhost, 127.x, 0.0.0.0, [::1], *.local or a private / link-local IPv4
 # A rollback runs the same check, but may restore a site without a CSP (the Unity-only page, before the React site).
 set -euo pipefail
@@ -23,6 +24,9 @@ KEEP=(.git .gitignore README.md app scripts)
 die() { echo "deploy-commit: $*" >&2; exit 1; }
 PRODUCTION_API="https://bombkicker-api-production.tdn548.workers.dev"   # app/src/csp.ts PRODUCTION_API_URL
 GAME_SERVERS='wss://\*\.pr\.edgegap\.net:\*'                              # app/src/csp.ts PRODUCTION_GAME_SERVERS (as a regex)
+# app/src/csp.ts PRODUCTION_UNITY_SERVICES and PRODUCTION_UNITY_RELAY (as regexes)
+UNITY_SOURCES=('https://player-auth\.services\.api\.unity\.com' 'https://lobby\.services\.api\.unity\.com'
+  'https://relay-allocations\.services\.api\.unity\.com' 'wss://wire\.unity3d\.com' 'wss://\*\.relay\.uf\.unity3d\.com:\*')
 site="" rollback="" repo="" branch="main" check_only=0
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -66,6 +70,11 @@ publish_check() {
       || die "REFUSED: the CSP connect-src does not allow the production API $PRODUCTION_API"
     printf '%s\n' "$policy" | tr ';' '\n' | grep -Eq "^[[:space:]]*connect-src( [^ ]+)* $GAME_SERVERS( |\$)" \
       || die "REFUSED: the CSP connect-src does not allow the game servers wss://*.pr.edgegap.net:* (online play would be blocked, BUG-SS18-001)"
+    local src
+    for src in "${UNITY_SOURCES[@]}"; do
+      printf '%s\n' "$policy" | tr ';' '\n' | grep -Eq "^[[:space:]]*connect-src( [^ ]+)* $src( |\$)" \
+        || die "REFUSED: the CSP connect-src does not allow the Unity source $(printf '%s' "$src" | tr -d '\\') (relay rooms would be blocked)"
+    done
   fi
   return 0
 }
@@ -73,7 +82,7 @@ publish_check() {
 if [ "$check_only" -eq 1 ]; then
   [ -f "$site/index.html" ] || die "no index.html in $site"
   publish_check "$site" 1
-  echo "deploy-commit: check passed: $site is a production build (CSP present, production API and Edgegap game servers only, not local)"
+  echo "deploy-commit: check passed: $site is a production build (CSP present, production API, Edgegap game servers and Unity Relay only, not local)"
   exit 0
 fi
 

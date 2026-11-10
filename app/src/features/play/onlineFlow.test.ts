@@ -34,6 +34,28 @@ describe("Searching overlay states (ux-spec 9.2)", () => {
     expect(overlayView(s)).toMatchObject({ title: "online.roomWaiting" });
   });
 
+  it("relay room (D5b): waiting without seconds shows the friends copy, no countdown", () => {
+    let s = startState({ kind: "createRoom", mode: "1v1" });
+    s = applyStatus(s, { type: "status", phase: "searching", mode: "1v1" });
+    expect(overlayView(s)).toMatchObject({ title: "online.creating", buttons: ["cancel"] });
+    s = applyStatus(s, { type: "status", phase: "waiting", roomCode: "K7M2QX", mode: "1v1", humans: 1, capacity: 2 });
+    expect(overlayView(s)).toEqual({
+      title: "online.roomWaiting",
+      body: "online.roomWaitingFriendsBody",
+      codeLine: false,
+      buttons: ["copy", "leaveRoom"],
+      cancelNote: true,
+      countdown: false,
+    });
+    s = applyStatus(s, { type: "status", phase: "loading", roomCode: "K7M2QX" });
+    expect(overlayView(s)).toMatchObject({ title: "online.loading", buttons: [] });
+    let j = startState({ kind: "joinRoom", roomCode: "K7M2QX" });
+    j = applyStatus(j, { type: "status", phase: "connecting", roomCode: "K7M2QX" });
+    expect(overlayView(j)).toMatchObject({ title: "online.connecting", codeLine: true, buttons: ["cancel"] });
+    j = applyStatus(j, { type: "status", phase: "waiting", roomCode: "K7M2QX", humans: 2, capacity: 4 });
+    expect(overlayView(j)).toMatchObject({ title: "online.roomWaiting", body: "online.roomWaitingFriendsBody", countdown: false });
+  });
+
   it("an error status opens the error with the mapped copy", () => {
     const s = applyStatus(startState({ kind: "joinRoom", roomCode: "K7M2QX" }), { type: "status", phase: "error", code: "ROOM_FULL" });
     expect(s.error).toEqual({ code: "ROOM_FULL", key: "err.room.full", actions: ["close"] });
@@ -48,6 +70,11 @@ describe("online errors (ux-spec 9.3)", () => {
     ["ROOM_NOT_FOUND", "err.room.notFound", ["editCode", "close"]],
     ["ROOM_FULL", "err.room.full", ["close"]],
     ["SERVER_GONE", "err.room.started", ["close"]],
+    ["ROOM_STARTED", "err.room.started", ["close"]],
+    ["ROOM_CLOSED", "err.room.closed", ["close"]],
+    ["HOST_LEFT", "err.room.hostLeft", ["close"]],
+    ["RELAY_UNAVAILABLE", "err.room.relay", ["retry", "close"]],
+    ["MODE_MISMATCH", "err.room.mode", ["close"]],
     ["SOMETHING_NEW", "err.online.network", ["retry", "close"]],
   ])("%s -> %s", (code, key, actions) => {
     expect(mapOnlineError(code)).toMatchObject({ key, actions });

@@ -55,11 +55,15 @@ mis_wss_lan="$(site mislabel-wss-lan "${prod_meta/connect-src \'self\'/connect-s
 mis_ws_localhost="$(site mislabel-ws-localhost "${prod_meta/connect-src \'self\'/connect-src \'self\' wss://localhost:7900}" false)"
 mis_ws_public="$(site mislabel-ws-public "${prod_meta/connect-src \'self\'/connect-src \'self\' ws://game.example:*}" false)"
 no_edgegap="$(site no-edgegap "${prod_meta/ wss:\/\/\*.pr.edgegap.net:\*/}" false)"
+# Relay rooms (D5b): the Unity Relay server WebSocket and the lobby service must stay in connect-src
+no_relay="$(site no-unity-relay "${prod_meta/ wss:\/\/\*.relay.uf.unity3d.com:\*/}" false)"
+no_lobby="$(site no-unity-lobby "${prod_meta/ https:\/\/lobby.services.api.unity.com/}" false)"
 nocsp="$(site no-csp "" false)"
 noprod="$(site no-prod-api "${prod_meta//https:\/\/bombkicker-api-production.tdn548.workers.dev/https://example.com}" false)"
 localflag="$(site local-flag-only "$prod_meta" true)"
 
 case "$prod_meta" in *"wss://*.pr.edgegap.net:*"*) ok "production policy allows wss://*.pr.edgegap.net:*" ;; *) ko "production policy lacks the Edgegap game servers" "$prod_meta" ;; esac
+case "$prod_meta" in *"https://player-auth.services.api.unity.com https://lobby.services.api.unity.com https://relay-allocations.services.api.unity.com wss://wire.unity3d.com wss://*.relay.uf.unity3d.com:*"*) ok "production policy allows the Unity Services and Unity Relay sources" ;; *) ko "production policy lacks the Unity sources" "$prod_meta" ;; esac
 case "$prod_meta" in *ws://*|*127.0.0.1*|*localhost*) ko "production policy names a local or ws: source" "$prod_meta" ;; *) ok "production policy has no local or ws: source" ;; esac
 case "$local_meta" in *"ws://127.0.0.1:* wss://127.0.0.1:*"*) ok "local policy allows ws/wss to 127.0.0.1 (any port)" ;; *) ko "local policy lacks 127.0.0.1 game servers" "$local_meta" ;; esac
 case "$lan_meta" in *"ws://192.168.1.20:* wss://192.168.1.20:*"*) ok "LAN policy allows ws/wss to the LAN host" ;; *) ko "LAN policy lacks the LAN game server" "$lan_meta" ;; esac
@@ -79,6 +83,8 @@ expect 1 "CSP with wss://192.168.x:* (game server)"      "$D" --check --site "$m
 expect 1 "CSP with wss://localhost (game server)"        "$D" --check --site "$mis_ws_localhost"
 expect 1 "CSP with a plain ws:// source"                 "$D" --check --site "$mis_ws_public"
 expect 1 "connect-src without the Edgegap game servers"  "$D" --check --site "$no_edgegap"
+expect 1 "connect-src without Unity Relay"               "$D" --check --site "$no_relay"
+expect 1 "connect-src without the Unity lobby service"   "$D" --check --site "$no_lobby"
 expect 1 "no CSP meta"                                   "$D" --check --site "$nocsp"
 expect 1 "connect-src without the production API"        "$D" --check --site "$noprod"
 

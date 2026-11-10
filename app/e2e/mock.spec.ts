@@ -96,7 +96,10 @@ test("H rooms: create shows the code; leave sends cancelOnline; join errors", as
   await expect(page.getByTestId("room-code-display").first()).toHaveText("K7M2QX");
   await expect(page.getByText("Chưa vào trận nên không bị trừ điểm.")).toBeVisible();
   await shot(page, info, "H-room-code");
-  await expect(page.getByText("Đang chờ bạn bè")).toBeVisible({ timeout: 5000 });
+  await expect(page.getByText("Đang chờ bạn bè", { exact: true })).toBeVisible({ timeout: 5000 });
+  // Relay rooms (D5b): no bots, no countdown; the room starts when it is full
+  await expect(page.getByTestId("searching-overlay")).toContainText("Mã phòng: K7M2QX · 1/2 người chơi · Đang chờ bạn bè…");
+  await expect(page.getByTestId("searching-overlay")).not.toContainText("Bot");
   await shot(page, info, "H-room-waiting");
   await page.getByTestId("cancel-online").click();
   await expect(page.getByTestId("searching-overlay")).toHaveCount(0);
@@ -115,6 +118,8 @@ test("H rooms: create shows the code; leave sends cancelOnline; join errors", as
     ["AAAAAA", "Không tìm thấy phòng AAAAAA. Mã có thể bị sai, hoặc phòng đã đóng."],
     ["FFFFFF", "Phòng FFFFFF đã đủ người."],
     ["GGGGGG", "Phòng GGGGGG đã bắt đầu trận. Hãy nhờ bạn tạo phòng mới."],
+    ["CCCCCC", "Phòng CCCCCC đã đóng."],
+    ["RRRRRR", "Không kết nối được dịch vụ phòng. Kiểm tra mạng rồi thử lại."],
   ] as const) {
     await expect(page.getByTestId("join-room")).toBeVisible();
     await input.fill(code);
@@ -131,6 +136,23 @@ test("H rooms: create shows the code; leave sends cancelOnline; join errors", as
     }
     await expect(page.getByTestId("searching-overlay")).toHaveCount(0);
   }
+});
+
+test("H rooms: the host leaving mid-match shows HOST_LEFT (no result, no points)", async ({ page }, info) => {
+  await page.goto("./#/play/online");
+  await knobs(page, { matchMs: 30000, hostLeftAfterMs: 800 });
+  await expect(page.getByTestId("join-room")).toBeVisible();
+  await page.getByTestId("room-code").fill("K7M2QX");
+  await expect(page.getByTestId("join-room")).not.toHaveAttribute("aria-disabled", { timeout: 5000 });
+  await page.getByTestId("join-room").click();
+  await expect(page.getByTestId("mock-match")).toBeVisible({ timeout: 15000 });
+  await expect(page.getByTestId("online-error")).toHaveText("Chủ phòng đã rời trận. Trận này không tính điểm.", { timeout: 5000 });
+  await expect(page.getByTestId("online-error")).toHaveAttribute("data-code", "HOST_LEFT");
+  await shot(page, info, "H-room-host-left");
+  expect((await bridgeLog(page)).some((e) => e.msg.type === "matchEnded")).toBe(false);
+  await page.getByRole("button", { name: "Đóng" }).click();
+  await expect(page.getByTestId("searching-overlay")).toHaveCount(0);
+  await expect(page.getByTestId("quick-match")).toBeVisible();
 });
 
 test("J: leaving an online match shows the D16 copy when the result is not in yet", async ({ page }, info) => {

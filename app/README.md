@@ -15,7 +15,9 @@ The files in the repo root (`../index.html`, `../Build`) are the live GitHub Pag
 | `BK_E2E_REAL=1 npx playwright test` | real suite (below) |
 
 Mock knobs for tests and manual checks: `window.__BK_MOCK__` (see `src/unity/mockUnity.ts`); room codes `AAAAAA`, `FFFFFF`,
-`GGGGGG`, `BBBBBB` give `ROOM_NOT_FOUND`, `ROOM_FULL`, `SERVER_GONE`, `SERVERS_FULL`.
+`GGGGGG`, `BBBBBB`, `CCCCCC`, `RRRRRR` give `ROOM_NOT_FOUND`, `ROOM_FULL`, `ROOM_STARTED`, `SERVERS_FULL`, `ROOM_CLOSED`,
+`RELAY_UNAVAILABLE`; `hostLeftAfterMs` makes the room host leave mid-match (`HOST_LEFT`). Rooms run on Unity Relay (D5b):
+the waiting status has no bot countdown, the room starts when it is full.
 
 ## Real suite setup
 
@@ -31,6 +33,11 @@ Mock knobs for tests and manual checks: `window.__BK_MOCK__` (see `src/unity/moc
    `DEDICATED_SERVER=1 MATCH_MODE=1v1 PORT=<port> API_URL=http://127.0.0.1:<api port> SERVER_SECRET=… JOIN_SECRET=…
    BK_DEV_FORCE_END_AFTER=30 BombKicker -batchmode -nographics -dedicatedServer` (same secrets as the API's `.dev.vars`).
 4. `BK_E2E_REAL=1 [BK_E2E_API=…] npx playwright test`.
+5. Relay rooms (D5b): `e2e/relay-rooms.real.spec.ts` (Chromium) needs the dev Unity build `WebBuild.BuildWebDev`
+   (`Builds/WebDev/Web`, define `BK_DEV_HOOKS`: the host page's `?devForceEnd=<s>` ends the match) in `public/game/`, the
+   API with `ADMIN_DEV_BYPASS=true` (admin checks) and outbound wss to the Unity Relay ports 37000-37100.
+   `e2e/room-code-input.real.spec.ts` (Chromium, WebKit, iPhone WebKit) checks typing, Backspace, Delete, paste and
+   uppercase in the room code field with Unity loaded, and that gameplay keys still reach Unity in a match.
 
 ## Shop suite (SS-14)
 - Mock: `npx playwright test e2e/shop.mock.spec.ts` (all screens and every purchase error; knobs `purchaseErrors`,
@@ -47,7 +54,11 @@ Mock knobs for tests and manual checks: `window.__BK_MOCK__` (see `src/unity/moc
 - CSP: `vite build` adds `<meta http-equiv="Content-Security-Policy">` to `index.html` (`src/csp.ts`; GitHub Pages cannot
   send headers, D10). `script-src 'self' blob: 'wasm-unsafe-eval'` and `worker-src 'self' blob:` are what the Unity loader
   needs (blob: framework script, blob: gzip worker, wasm); `connect-src` / `img-src` allow `'self'` and the production
-  API only, and `connect-src` also the Edgegap game servers `wss://*.pr.edgegap.net:*` (Unity's WebSocket, dynamic port).
+  API only, and `connect-src` also the Edgegap game servers `wss://*.pr.edgegap.net:*` (Unity's WebSocket, dynamic port)
+  and, for relay rooms (D5b), the Unity Services the WebGL client calls: `https://player-auth.services.api.unity.com`,
+  `https://lobby.services.api.unity.com`, `https://relay-allocations.services.api.unity.com`, `wss://wire.unity3d.com`
+  and the Relay servers `wss://*.relay.uf.unity3d.com:*` (port 37000-37100). `e2e/csp-websocket.mock.spec.ts` proves
+  them in Chromium, desktop WebKit and iPhone WebKit; `scripts/deploy-commit.sh` refuses a build without them.
   Local builds: `BK_CSP_LOCAL_API=1` adds `http://localhost:8787` and `http://127.0.0.1:8787`, plus `ws://`/`wss://` to
   localhost and 127.0.0.1 (any port, local game servers); `VITE_API_URL` adds its origin (use `http://<LAN IP>:8787`
   for phone tests), and with `BK_CSP_LOCAL_API=1` ws/wss to its host if that host is local or on the LAN. `npm run dev` has no policy (hot reload uses inline scripts).

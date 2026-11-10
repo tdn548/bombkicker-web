@@ -13,6 +13,11 @@
 //   the deployment fqdn, port = ports.gameport.external, TLS Upgrade on, so always wss). Local test builds
 //   (BK_CSP_LOCAL_API=1) also allow ws/wss to localhost, 127.0.0.1 and the LAN API host, any port (local Edgegap
 //   emulator, Mac dev server); deploy-commit.sh refuses any build that names them.
+// - connect-src Unity Services (relay rooms, D5b): the room creator's browser hosts the match over Unity Relay.
+//   Captured from the WebGL client in a full room flow (BombKicker .agents/tasks/skin-shop/relay-rooms/csp-capture.md):
+//   player-auth (UGS anonymous sign-in), lobby (Multiplayer Services session: create, join by code, heartbeat, leave),
+//   relay-allocations (regions, allocate, join code, join), wss://wire.unity3d.com (lobby events) and the Relay server
+//   wss://<allocation>.<region>.relay.uf.unity3d.com:<37000-37100> (NGO traffic; WebKit needs the explicit port wildcard).
 // A meta policy cannot carry frame-ancestors (browsers ignore it there); main.tsx refuses to run inside a frame.
 
 /** Production Worker (same value as Unity's ApiConfig.ProductionUrl). */
@@ -23,6 +28,17 @@ export const LOCAL_API_ORIGINS = ["http://localhost:8787", "http://127.0.0.1:878
 
 /** Game servers in production: Edgegap deployments, TLS on a dynamic port. */
 export const PRODUCTION_GAME_SERVERS = ["wss://*.pr.edgegap.net:*"] as const;
+/** Unity Services the WebGL client calls for relay rooms (https APIs and the lobby events WebSocket). */
+export const PRODUCTION_UNITY_SERVICES = [
+  "https://player-auth.services.api.unity.com",
+  "https://lobby.services.api.unity.com",
+  "https://relay-allocations.services.api.unity.com",
+  "wss://wire.unity3d.com",
+] as const;
+/** Unity Relay servers: TLS WebSocket on an allocation-numbered host and a port from 37000-37100. */
+export const PRODUCTION_UNITY_RELAY = "wss://*.relay.uf.unity3d.com:*";
+/** Every Unity source in connect-src (production and local builds alike). */
+export const UNITY_SOURCES: readonly string[] = [...PRODUCTION_UNITY_SERVICES, PRODUCTION_UNITY_RELAY];
 /** Hosts a local test build may open WebSockets to (any port). */
 export const LOCAL_GAME_SERVER_HOSTS = ["localhost", "127.0.0.1"] as const;
 /** localhost, 127.x or a private LAN IPv4 (10.x, 172.16-31.x, 192.168.x); same rule as config.ts isLocalHost. */
@@ -74,13 +90,17 @@ export function gameServerSources(env: { VITE_API_URL?: string; BK_CSP_LOCAL_API
   for (const h of new Set(hosts)) out.push(`ws://${h}:*`, `wss://${h}:*`);
   return out;
 }
-export function buildCsp(api: readonly string[], gameServers: readonly string[] = PRODUCTION_GAME_SERVERS): string {
+export function buildCsp(
+  api: readonly string[],
+  gameServers: readonly string[] = PRODUCTION_GAME_SERVERS,
+  unity: readonly string[] = UNITY_SOURCES,
+): string {
   const apiList = api.join(" ");
   return [
     "default-src 'self'",
     "script-src 'self' blob: 'wasm-unsafe-eval'",
     "worker-src 'self' blob:",
-    `connect-src 'self' ${[...api, ...gameServers].join(" ")}`,
+    `connect-src 'self' ${[...api, ...gameServers, ...unity].join(" ")}`,
     `img-src 'self' data: blob: ${apiList}`,
     "style-src 'self'",
     "font-src 'self'",

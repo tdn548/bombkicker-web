@@ -4,8 +4,11 @@
 //   loadMs (1200), legacyDeviceId (null), result ("win"), matchMs (2500), recordDelayMs (1200),
 //   failLoad (false), authExpiredOnStart (false), noRecord (false: online result never reaches the API),
 //   syncStatus (true: answer startOnline with a status inside sendMessage, like the real Unity),
+//   hostLeftAfterMs (rooms: the host leaves this long after inMatch -> status error HOST_LEFT, no matchEnded),
 //   purchaseErrors / equipErrors / purchaseDelayMs (mock API, see src/api/mock.ts)
-// Room codes for errors: AAAAAA ROOM_NOT_FOUND, FFFFFF ROOM_FULL, GGGGGG SERVER_GONE, BBBBBB SERVERS_FULL.
+// Room codes for errors: AAAAAA ROOM_NOT_FOUND, FFFFFF ROOM_FULL, GGGGGG ROOM_STARTED, BBBBBB SERVERS_FULL,
+// CCCCCC ROOM_CLOSED, RRRRRR RELAY_UNAVAILABLE.
+// Rooms run on Unity Relay (D5b): waiting has no bot countdown (no seconds), the room starts when it is full.
 import { createElement, useEffect, useState } from "react";
 import { getMockApi } from "../api/mockSingleton";
 import type { FromUnity, MatchKind, MatchResult } from "./bridge";
@@ -20,6 +23,7 @@ export interface MockKnobs {
   authExpiredOnStart?: boolean;
   noRecord?: boolean;
   syncStatus?: boolean;
+  hostLeftAfterMs?: number;
   /** Mock API shop knobs (src/api/mock.ts): queues of error codes, one per request. */
   purchaseErrors?: string[];
   equipErrors?: string[];
@@ -44,7 +48,14 @@ export interface MockUnity {
   onScene(listener: (s: Scene) => void): () => void;
 }
 
-const ROOM_ERRORS: Record<string, string> = { AAAAAA: "ROOM_NOT_FOUND", FFFFFF: "ROOM_FULL", GGGGGG: "SERVER_GONE", BBBBBB: "SERVERS_FULL" };
+const ROOM_ERRORS: Record<string, string> = {
+  AAAAAA: "ROOM_NOT_FOUND",
+  FFFFFF: "ROOM_FULL",
+  GGGGGG: "ROOM_STARTED",
+  BBBBBB: "SERVERS_FULL",
+  CCCCCC: "ROOM_CLOSED",
+  RRRRRR: "RELAY_UNAVAILABLE",
+};
 
 export function createMockUnity(): MockUnity {
   let emitJson: (json: string) => void = () => {};
@@ -110,15 +121,31 @@ export function createMockUnity(): MockUnity {
     }
     const code = kind === "createRoom" ? "K7M2QX" : roomCode;
     const room = code ? { roomCode: code } : {};
-    if (kind === "quick") later(300, () => emit({ type: "status", phase: "searching", mode }));
-    later(700, () => emit({ type: "status", phase: "starting", mode, ...room }));
-    later(1500, () => emit({ type: "status", phase: "connecting", mode, ...room }));
-    later(2000, () => emit({ type: "status", phase: "waiting", mode, humans: 1, capacity, seconds: kind === "quick" ? 3 : 6, ...room }));
     const fill = kind === "quick" ? 5000 : 8000;
+    if (kind === "quick") {
+      later(300, () => emit({ type: "status", phase: "searching", mode }));
+      later(700, () => emit({ type: "status", phase: "starting", mode }));
+      later(1500, () => emit({ type: "status", phase: "connecting", mode }));
+      later(2000, () => emit({ type: "status", phase: "waiting", mode, humans: 1, capacity, seconds: 3 }));
+    } else {
+      // Relay room: API + Relay session (searching), connect to the host, wait until full (no seconds), start.
+      later(300, () => emit({ type: "status", phase: "searching", mode, ...(kind === "joinRoom" ? room : {}) }));
+      if (kind === "joinRoom") later(1200, () => emit({ type: "status", phase: "connecting", mode, ...room }));
+      later(2000, () => emit({ type: "status", phase: "waiting", mode, humans: kind === "joinRoom" ? 2 : 1, capacity, ...room }));
+      later(fill - 2000, () => emit({ type: "status", phase: "waiting", mode, humans: capacity, capacity, ...room }));
+    }
     later(fill, () => emit({ type: "status", phase: "loading", mode, ...room }));
     later(fill + 700, () => {
       emit({ type: "status", phase: "inMatch", mode, ...room });
       playMatch(matchKind, mode, `${kind} ${mode}${code ? ` room ${code}` : ""}`);
+      const hostLeft = knobs().hostLeftAfterMs;
+      if (kind !== "quick" && hostLeft !== undefined) {
+        later(hostLeft, () => {
+          clear();
+          emit({ type: "status", phase: "error", code: "HOST_LEFT", message: "mock host left", mode, ...room });
+          later(100, toMenu);
+        });
+      }
     });
   };
 
