@@ -1,8 +1,8 @@
 {
-  "react": { "commit": "83469139e7c43092d2f78abbc0cc8bd3fc72d185", "branch": "main", "dirty": false },
-  "unity": { "commit": "242307df9bf131d87e2981aa9687b6fb9a784b2a", "dirty": false, "changedFiles": [], "builtAt": "2026-11-09T23:15:50Z" },
+  "react": { "commit": "cf726413043498562bc9633cf000e525cffbfe9f", "branch": "main", "dirty": false },
+  "unity": { "commit": "c845da8b01b283df12ab2eb226ccee1b64ceb3e7", "dirty": false, "changedFiles": [], "builtAt": "2026-11-10T18:12:42Z" },
   "base": "/bombkicker-web/",
   "local": false,
   "localApi": null,
-  "builtAt": "2026-11-09T23:23:08Z"
+  "builtAt": "2026-11-10T21:38:13Z"
 }
